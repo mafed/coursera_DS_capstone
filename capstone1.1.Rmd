@@ -1,0 +1,411 @@
+---
+title: "Capstone Project"
+author: "Christopher Stewart"
+date: "March 11, 2015"
+output: html_document
+---
+
+## Introduction 
+This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use corpora to build a text prediction algorithmthat is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation] (insert URL here).
+
+I have elected to complete the project in R as per the parameters of the assignment, but also in Python to get hands-on experience with the Python Natural Language Toolkit, or [NLTK] (http://www.nltk.org/). A report on the Python version of the project is available [here] (insert URL here).
+
+## Data preparation and exploration
+
+### Data Acquisition
+
+Initially, we download the data and unzip the data files, switching working directories to that of the English language text files. We then print out the contents of the current directory and inspect the number of lines in each of the corpora.
+
+```{r}
+require("downloader"); require("R.utils")
+
+# download, unzip data and setwd()
+url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download(url, dest = "data.zip", mode = "wb")
+unzip("data.zip", exdir = "./")
+
+# set working directory
+setwd(paste(getwd(),"/final/en_US",sep=""))
+list.files()
+
+# get an idea of corpora sizes in lines
+as.numeric(countLines("en_US.blogs.txt"))
+as.numeric(countLines("en_US.news.txt"))
+as.numeric(countLines("en_US.twitter.txt"))
+
+# get an idea of corpora sizes in terms of memory
+file.info("en_US.blogs.txt")$size
+```
+
+### Data Sampling
+
+Seeing the large size of the corpora and cognizant of the fact that a representative sample is sufficient for model building, we next take a random subsample of the data. We first compute the n necessary for a representative sample size, then we draw a random sample from each of the corpora.
+
+```{r}
+require("stats")
+
+# make new folders for samples
+dir.create(path = "./samples/")
+dir.create(path = "./samples/blogs")
+dir.create(path = "./samples/news")
+dir.create(path = "./samples/tweets")
+
+# compute sample size needed
+sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05)$n, digits = 0)
+
+# make samples, clean them, then write them out for subsequent corpus creation
+
+# blogs
+blogs <- readLines("en_US.blogs.txt", encoding="UTF-8")
+blogs_sample <- sample(blogs, sample_size)
+blogs_sample_clean <- iconv(blogs_sample, from="UTF-8", to="latin1", sub=" ")
+write(blogs_sample_clean, file = "./samples/blogs/blogs_sample.txt")
+
+# news
+news <- readLines("en_US.news.txt", encoding="UTF-8")
+news_sample <- sample(news, sample_size)
+news_sample_clean <- iconv(news_sample, from="UTF-8", to="latin1", sub=" ")
+write(news_sample_clean, file = "./samples/news/news_sample.txt")
+
+# tweets
+tweets <- readLines("en_US.twitter.txt", encoding="UTF-8", skipNul = TRUE)
+tweets_sample <- sample(tweets, sample_size)
+tweets_sample_clean <- iconv(tweets_sample, from="UTF-8", to="latin1", sub=" ")
+write(tweets_sample_clean, file = "./samples/tweets/tweets_sample.txt")
+```
+
+
+### Corpus Creation and Profanity Removal
+
+Next, we build the corpora for the three samples (blogs vs. news vs. tweets) using R's text mining package [tm] (http://cran.r-project.org/web/packages/tm/index.html).
+
+```{r}
+require("tm")
+
+# build corpora from samples
+blogs_corpus  <-Corpus(DirSource("./samples/blogs"), readerControl = list(language="lat"))
+news_corpus  <-Corpus(DirSource("./samples/news"), readerControl = list(language="lat"))
+tweets_corpus  <-Corpus(DirSource("./samples/tweets"), readerControl = list(language="lat"))
+
+# clean corpora for model building
+# blogs cleaning
+
+blogs_corpus.1 <- tm_map(blogs_corpus, removeNumbers)
+blogs_corpus.2 <- tm_map(blogs_corpus.1, removePunctuation)
+blogs_corpus.3 <- tm_map(blogs_corpus.2 , stripWhitespace)
+blogs_corpus.4 <- tm_map(blogs_corpus.3, content_transformer(tolower))
+
+# blogs profanity removal
+profanity_list <- VectorSource(readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE))
+blogs_corpus_clean <- tm_map(blogs_corpus.4, removeWords, profanity_list)
+
+# news cleaning
+news_corpus.1 <- tm_map(news_corpus, removeNumbers)
+news_corpus.2 <- tm_map(news_corpus.1, removePunctuation)
+news_corpus.3 <- tm_map(news_corpus.2 , stripWhitespace)
+news_corpus.4 <- tm_map(news_corpus.3, content_transformer(tolower))
+
+# news profanity removal
+news_corpus_clean <- tm_map(news_corpus.4, removeWords, profanity_list)
+
+# tweets cleaning
+tweets_corpus.1 <- tm_map(tweets_corpus, removeNumbers)
+tweets_corpus.2 <- tm_map(tweets_corpus.1, removePunctuation)
+tweets_corpus.3 <- tm_map(tweets_corpus.2 , stripWhitespace)
+tweets_corpus.4 <- tm_map(tweets_corpus.3, content_transformer(tolower))
+
+# tweets profanity removal
+tweets_corpus_clean <- tm_map(tweets_corpus.4, removeWords, profanity_list)
+
+```
+
+## Data Exploration
+
+Having acquired and cleaned the data, we now move on to an exploratory data analysis.
+
+
+### Term Document Matrix Creation
+
+For the purpose of analyzing the corpora, we first create Term Document Matrices. These will allow us to get an initial idea of highly frequent sequences against which we can subsequently test our text prediction models.
+
+We retrieve the ten most frequent words, bigrams, trigrams and 4-grams, printing these out to a table. 
+
+```{r}
+require(plyr); require(wordcloud); require(RWeka)
+
+# Create TermDocumentMatrix Objects for single words
+blogs_TDM_uni <- TermDocumentMatrix(blogs_corpus_clean,
+                                 control = list(wordLengths=c(0, Inf) ))
+news_TDM_uni <- TermDocumentMatrix(news_corpus_clean,
+                                 control = list(wordLengths=c(0, Inf) ))
+tweets_TDM_uni <- TermDocumentMatrix(tweets_corpus_clean,
+                                 control = list(wordLengths=c(0, Inf) ))
+
+# Create TermDocumentMatrix Objects for bigrams with RWeka
+BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+blogs_TDM_bi <- TermDocumentMatrix(blogs_corpus_clean, control = list(tokenize = BigramTokenizer))
+news_TDM_bi <- TermDocumentMatrix(news_corpus_clean, control = list(tokenize = BigramTokenizer))
+tweets_TDM_bi <- TermDocumentMatrix(tweets_corpus_clean, control = list(tokenize = BigramTokenizer))
+
+# Create TermDocumentMatrix Objects for trigrams with RWeka
+TrigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+blogs_TDM_tri <- TermDocumentMatrix(blogs_corpus_clean, control = list(tokenize = TrigramTokenizer))
+news_TDM_tri <- TermDocumentMatrix(news_corpus_clean, control = list(tokenize = TrigramTokenizer))
+tweets_TDM_tri <- TermDocumentMatrix(tweets_corpus_clean, control = list(tokenize = TrigramTokenizer))
+
+# Create TermDocumentMatrix Objects for 4-grams with RWeka
+FourgramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+blogs_TDM_4 <- TermDocumentMatrix(blogs_corpus_clean, control = list(tokenize = FourgramTokenizer))
+news_TDM_4 <- TermDocumentMatrix(news_corpus_clean, control = list(tokenize = FourgramTokenizer))
+tweets_TDM_4 <- TermDocumentMatrix(tweets_corpus_clean, control = list(tokenize = FourgramTokenizer))
+
+
+# Find top 10 most frequent words, bigrams and trigrams in each corpus
+## Blogs single words
+blogs_TDM.mat <- as.matrix(blogs_TDM)
+blogs_word_freq = sort(rowSums(blogs_TDM.mat), decreasing=TRUE)
+blogs_word_freq_df = data.frame(word=names(blogs_word_freq), frequency=blogs_word_freq)
+blogs_word_freq_df_sorted <- arrange(blogs_word_freq_df, frequency)
+blogs_top_10 <- tail(blogs_word_freq_df_sorted, n = 10)
+
+## Blogs bigrams
+blogs_TDM.mat_bi <- as.matrix(blogs_TDM_bi)
+blogs_word_freq_bi = sort(rowSums(blogs_TDM.mat_bi), decreasing=TRUE)
+blogs_word_freq_df_bi = data.frame(bigram=names(blogs_word_freq_bi), frequency=blogs_word_freq_bi)
+blogs_word_freq_df_sorted_bi <- arrange(blogs_word_freq_df_bi, frequency)
+blogs_top_10_bi <- tail(blogs_word_freq_df_sorted_bi, n = 10)
+
+## Blogs trigrams
+blogs_TDM.mat_tri <- as.matrix(blogs_TDM_tri)
+blogs_word_freq_tri = sort(rowSums(blogs_TDM.mat_tri), decreasing=TRUE)
+blogs_word_freq_df_tri = data.frame(trigram=names(blogs_word_freq_tri), frequency=blogs_word_freq_tri)
+blogs_word_freq_df_sorted_tri <- arrange(blogs_word_freq_df_tri, frequency)
+blogs_top_10_tri <- tail(blogs_word_freq_df_sorted_tri, n = 10)
+
+## Blogs 4-grams
+blogs_TDM.mat_4 <- as.matrix(blogs_TDM_4)
+blogs_word_freq_4 = sort(rowSums(blogs_TDM.mat_4), decreasing=TRUE)
+blogs_word_freq_df_4 = data.frame(four_gram=names(blogs_word_freq_4), frequency=blogs_word_freq_4)
+blogs_word_freq_df_sorted_4 <- arrange(blogs_word_freq_df_4, frequency)
+blogs_top_10_4 <- tail(blogs_word_freq_df_sorted_4, n = 10)
+
+## Blogs summary table
+blogs_joined_freq = cbind(blogs_top_10, blogs_top_10_bi, blogs_top_10_tri, blogs_top_10_4)
+print(blogs_joined_freq)
+
+
+## News single words
+news_TDM.mat <- as.matrix(news_TDM)
+news_word_freq = sort(rowSums(news_TDM.mat), decreasing=TRUE)
+news_word_freq_df = data.frame(word=names(news_word_freq), frequency=news_word_freq)
+news_word_freq_df_sorted <- arrange(news_word_freq_df, frequency)
+news_top_10 <- tail(news_word_freq_df_sorted, n = 10)
+
+## News bigrams
+news_TDM.mat_bi <- as.matrix(news_TDM_bi)
+news_word_freq_bi = sort(rowSums(news_TDM.mat_bi), decreasing=TRUE)
+news_word_freq_df_bi = data.frame(word=names(news_word_freq_bi), frequency=news_word_freq_bi)
+news_word_freq_df_sorted_bi <- arrange(news_word_freq_df_bi, frequency)
+news_top_10_bi <- tail(news_word_freq_df_sorted_bi, n = 10)
+
+## News trigrams
+news_TDM.mat_tri <- as.matrix(news_TDM_tri)
+news_word_freq_tri = sort(rowSums(news_TDM.mat_tri), decreasing=TRUE)
+news_word_freq_df_tri = data.frame(word=names(news_word_freq_tri), frequency=news_word_freq_tri)
+news_word_freq_df_sorted_tri <- arrange(news_word_freq_df_tri, frequency)
+news_top_10_tri <- tail(news_word_freq_df_sorted_tri, n = 10)
+
+## News 4-grams
+news_TDM.mat_4 <- as.matrix(news_TDM_4)
+news_word_freq_4 = sort(rowSums(news_TDM.mat_4), decreasing=TRUE)
+news_word_freq_df_4 = data.frame(four_gram=names(news_word_freq_4), frequency=news_word_freq_4)
+news_word_freq_df_sorted_4 <- arrange(news_word_freq_df_4, frequency)
+news_top_10_4 <- tail(news_word_freq_df_sorted_4, n = 10)
+
+
+## News summary table
+news_joined_freq = cbind(news_top_10, news_top_10_bi, news_top_10_tri, news_top_10_4)
+print(news_joined_freq)
+
+
+
+## Tweets single words
+tweets_TDM.mat <- as.matrix(tweets_TDM)
+tweets_word_freq = sort(rowSums(tweets_TDM.mat), decreasing=TRUE)
+tweets_word_freq_df = data.frame(word=names(tweets_word_freq), frequency=tweets_word_freq)
+tweets_word_freq_df_sorted <- arrange(tweets_word_freq_df, frequency)
+tweets_top_10 <- tail(tweets_word_freq_df_sorted, n = 10)
+
+## Tweets bigrams
+tweets_TDM.mat_bi <- as.matrix(tweets_TDM_bi)
+tweets_word_freq_bi = sort(rowSums(tweets_TDM.mat_bi), decreasing=TRUE)
+tweets_word_freq_df_bi = data.frame(word=names(tweets_word_freq_bi), frequency=tweets_word_freq_bi)
+tweets_word_freq_df_sorted_bi <- arrange(tweets_word_freq_df_bi, frequency)
+tweets_top_10_bi <- tail(tweets_word_freq_df_sorted_bi, n = 10)
+
+## Tweets trigrams
+tweets_TDM.mat_tri <- as.matrix(tweets_TDM_tri)
+tweets_word_freq_tri = sort(rowSums(tweets_TDM.mat_tri), decreasing=TRUE)
+tweets_word_freq_df_tri = data.frame(word=names(tweets_word_freq_tri), frequency=tweets_word_freq_tri)
+tweets_word_freq_df_sorted_tri <- arrange(tweets_word_freq_df_tri, frequency)
+tweets_top_10_tri <- tail(tweets_word_freq_df_sorted_tri, n = 10)
+
+## Tweets 4-grams
+tweets_TDM.mat_4 <- as.matrix(tweets_TDM_4)
+tweets_word_freq_4 = sort(rowSums(tweets_TDM.mat_4), decreasing=TRUE)
+tweets_word_freq_df_4 = data.frame(four_gram=names(tweets_word_freq_4), frequency=tweets_word_freq_4)
+tweets_word_freq_df_sorted_4 <- arrange(tweets_word_freq_df_4, frequency)
+tweets_top_10_4 <- tail(tweets_word_freq_df_sorted_4, n = 10)
+
+## Tweets summary table
+tweets_joined_freq = cbind(tweets_top_10, tweets_top_10_bi, tweets_top_10_tri, tweets_top_10_4)
+print(tweets_joined_freq)
+
+# probably have to redo n-gram/freq tables... also, look into switching to stylo for more efficient code:
+# The stylo package is very efficient.  I went to it based on a rec in the other thread and never turned back.
+
+# load.corpus() to bring it in
+# text.to.words() will tokenize for you
+# make.ngrams() will build all your ngrams.
+
+# then table() to get the counts
+
+# You can look at the docs to get the args for these and that's about all you'll need to get going.
+
+
+## push this (capstone1.1.Rmd) to Github, then work on optimizing code in a capstone1.2.Rmd
+
+### STOPPING HERE-- switching to capstone1.2 w/ stylo
+```
+
+# tweets DTM creation
+tweets_DTM <-DocumentTermMatrix(tweets_corpus_clean, control = list(tokenize = BigramTokenizer, weighting=weightTf))
+tweets_TDM <- TermDocumentMatrix(tweets_corpus_clean,
+                                 control = list(wordLengths=c(0, Inf) ))
+)
+  DocumentTermMatrix(tweets_corpus_clean, control = list(tokenize = BigramTokenizer, weighting=weightTf))
+
+
+tweets_TDM.mat <- as.matrix(tweets_TDM)
+word_freqs = sort(rowSums(tweets_TDM.mat), decreasing=TRUE) 
+dm = data.frame(word=names(word_freqs), freq=word_freqs)
+wordcloud(dm$word, dm$freq, random.order=FALSE, colors=brewer.pal(8, "Dark2"))
+
+```
+
+
+### Tokenization
+
+
+tweets <- scan(file = "en_US.twitter.txt", what = character(), fileEncoding = "UTF-8", skipNul = TRUE)
+
+Next, we sample from these large corpora. First, we use "countLines" to get the size of the blogs, news and twitter corpora. As a starting point, we use the first 5% of each corpus. 
+
+
+
+Next, we build the corpora for the three text files (blogs vs. news vs. tweets) using R's text mining package [tm] (http://cran.r-project.org/web/packages/tm/index.html).
+
+
+## -> then do corpus building
+
+
+# create corpora and check contents
+corpora <-Corpus(DirSource(getwd()), readerControl = list(language="lat"))
+summary(corpora)
+```
+
+## Data Cleaning
+
+In our next steps, we begin to clean the corpora, trimming out information that will hinder our eventual preparation of the text prediction algorithm. 
+
+```{r}
+# data cleaning using tm_map
+corpora <- tm_map(corpora, removeNumbers)
+
+```
+
+
+
+Next, we load in the data using R's [Stylo package] (https://sites.google.com/site/computationalstylistics/stylo).
+
+ We then prepare our profanity filter and take offensive words out of the English language corpora. 
+
+```{r}
+
+corpora <-Corpus(DirSource(getwd()), readerControl = list(language="lat"))
+corpora_no_prof_no_num <- removeNumbers(corpora)
+profanity_list <- VectorSource(readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE))
+corpora_no_prof <- tm_map(corpora, removeWords, profanity_list)
+
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+[Stylo package] (https://sites.google.com/site/computationalstylistics/stylo).
+```{r}
+require("stylo")
+blogs = load.corpus.and.parse(files = "en_US.blogs.txt", language = "English.all")
+news = load.corpus.and.parse(files = "en_US.news.txt", language = "English.all")
+tweets = load.corpus.and.parse(files = "en_US.twitter.txt", language = "English.all")
+
+```
+
+
+Next, we sample from the data for the purpose of efficiently building our first predictive text models.
+
+In the next step, we tokenize our sample, essentially turning the free text found in the sample into a set of "words". Finally we prepare our profanity filter and take offensive words out of the English language corpora. 
+
+```{r}
+# start with tokenization, then move onto profanity filtering
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+# change the next line to match up with sampled data (not whole corpus)
+corpora_no_prof <- tm_map(corpora, removeWords, profanity_list)
+```
+
+Finally we tokenize the data (turning free text into "words") and then take a sample of each corpus that we will initially use to build our predictive text model.
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+blogs <- readLines(con <- file("en_US.blogs.txt"), skipNul = TRUE)
+news <- readLines(con <- file("en_US.news.txt"), skipNul = TRUE)
+tweets <- readLines(con <- file("en_US.twitter.txt"), skipNul = TRUE)
+
+
+## load in data
+blogs = load.corpus.and.parse(files = "en_US.blogs.txt", language = "English.all")
+news = load.corpus.and.parse(files = "en_US.news.txt", language = "English.all")
+tweets = load.corpus.and.parse(files = "en_US.twitter.txt", language = "English.all")
+
+
+
+
+# get size of corpora for sampling purposes
+as.numeric(countLines("en_US.blogs.txt"))
+as.numeric(countLines("en_US.news.txt"))
+as.numeric(countLines("en_US.twitter.txt"))
+
+
+
+con_blogs <- file("en_US.blogs.txt", "r"); blogs_samp <- sample(con_blogs, )
+blogs_sample <- readLines(con_blogs, 
+
+<- file("en_US.twitter.txt", "r")
+
+
+
+
+, what = character(), quote = NULL, nlines = (size_blogs*.05))
+
+
+news <- scan(file = "en_US.news.txt", what = list(NULL, name = character()), quote = NULL, nlines = (size_news*.05))
+tweets <- scan(file = "en_US.twitter.txt", what = character(), fileEncoding = "UTF-8", skipNul = TRUE, nlines = (size_tweets*.05))
+
+
+Next, we sample from each corpora using the "readbig" function from [Data Manipulation with R] (http://www.springer.com/us/book/9780387747309). 
