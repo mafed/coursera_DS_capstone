@@ -1,0 +1,181 @@
+---
+title: "Capstone Project"
+author: "Christopher Stewart"
+date: "March 25, 2015"
+output: html_document
+---
+## Introduction 
+This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use corpora to build a text prediction algorithmthat is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation] (insert URL here).
+
+I have elected to complete the project in R as per the parameters of the assignment, but also in Python to get hands-on experience with the Python Natural Language Toolkit, or [NLTK] (http://www.nltk.org/). A report on the Python version of the project is available [here] (insert URL here).
+
+## Data preparation and exploration
+
+### Data Acquisition
+
+Initially, we download the data and unzip the data files, switching working directories to that of the English language text files. We then print out the contents of the current directory and inspect the number of lines in each of the corpora.
+
+```{r}
+require("downloader"); require("R.utils")
+
+# Download, unzip data and setwd()
+url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download(url, dest = "data.zip", mode = "wb")
+unzip("data.zip", exdir = "./")
+
+# Set working directory
+setwd(paste(getwd(),"/final/en_US",sep=""))
+list.files()
+
+# Get an idea of corpora sizes in lines
+as.numeric(countLines("en_US.blogs.txt"))
+as.numeric(countLines("en_US.news.txt"))
+as.numeric(countLines("en_US.twitter.txt"))
+
+# Get an idea of corpora sizes in terms of memory
+file.info("en_US.blogs.txt")$size
+
+# Clean up
+rm(url)
+```
+
+
+### Data Sampling
+
+Seeing the large size of the corpora and cognizant of the fact that a representative sample is sufficient for model building, we next take a random subsample of the data. We first compute the n necessary for a representative sample size, then we draw a random sample from each of the corpora. 
+
+```{r}
+require("stats")
+dir.create(path = "./samples/")
+
+# Compute sample size needed
+sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05)$n, digits = 0)
+# n = 9345
+
+# Read in data
+blogs <- readLines("en_US.blogs.txt"); news <- readLines("en_US.blogs.txt"); tweets <- readLines("en_US.blogs.txt", skipNul = TRUE)
+
+# Make samples
+blogs_samp <- sample(blogs, sample_size)
+news_samp <- sample(news, sample_size)
+tweets_samp <- sample(tweets, sample_size)
+
+# Clean up
+rm(sample_size); rm(blogs); rm(news); rm(tweets)
+```
+
+
+### Sample Cleaning and Profanity Removal
+
+For corpus creation, we first clean up our corpora by removing upper-case letters and non-alphanumeric characters. Next, we extract profanity. Finally, we write the resulting samples out to text files for subsequent use in corpus building.
+
+```{r}
+require("stringr")
+
+dir.create(path = "./samples/")
+
+# Data cleaning
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+## Blogs
+blogs_samp_1 <- tolower(blogs_samp)
+blogs_samp_2 <- str_replace_all(blogs_samp_1, "[^[:alnum:]]", " ")
+blogs_samp_3 <- str_replace_all(blogs_samp_2, "[[:digit:]]+", " ")
+blogs_samp_4 <- str_replace_all(blogs_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
+blogs_samp_5 <- str_replace_all(blogs_samp_4, "  ", replacement = " ")
+write.table(blogs_samp_5, file = "./samples/blogs_sample.txt")
+
+## News
+news_samp_1 <- tolower(news_samp)
+news_samp_2 <- str_replace_all(news_samp_1, "[^[:alnum:]]", " ")
+news_samp_3 <- str_replace_all(news_samp_2, "[[:digit:]]+", " ")
+news_samp_4 <- str_replace_all(news_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
+news_samp_5 <- str_replace_all(news_samp_4, "  ", replacement = " ")
+write.table(news_samp_5, file = "./samples/news_sample.txt")
+
+## Tweets
+tweets_samp_1 <- tolower(tweets_samp)
+tweets_samp_2 <- str_replace_all(tweets_samp_1, "[^[:alnum:]]", " ")
+tweets_samp_3 <- str_replace_all(tweets_samp_2, "[[:digit:]]+", " ")
+tweets_samp_4 <- str_replace_all(tweets_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
+tweets_samp_5 <- str_replace_all(tweets_samp_4, "  ", replacement = " ")
+write.table(tweets_samp_5, file = "./samples/tweets_sample.txt")
+
+## Clean up
+rm(profanity_list)
+rm(blogs_samp); rm(blogs_samp_1); rm(blogs_samp_2); rm(blogs_samp_3); rm(blogs_samp_4)
+rm(news_samp); rm(news_samp_1); rm(news_samp_2); rm(news_samp_3); rm(news_samp_4)
+rm(tweets_samp); rm(tweets_samp_1); rm(tweets_samp_2); rm(tweets_samp_3); rm(tweets_samp_4)
+
+```
+
+## Stylo Corpus Building, tokenization and n-gram construction
+
+In the next step of data processing, we load the 3 samples into R's [stylo] (https://sites.google.com/site/computationalstylistics/stylo) package. This initial step also tokenizes the data, then allows us to build unigrams, bigrams, trigrams and 4-grams. 
+
+```{r}
+require("stylo")
+
+# Load data into stylo corpus objects
+blogs_corp <- load.corpus(files = "blogs_sample.txt", corpus.dir = "./samples")
+news_corp <- load.corpus(files = "news_sample.txt", corpus.dir = "./samples")
+tweets_corp <- load.corpus(files = "tweets_sample.txt", corpus.dir = "./samples")
+
+
+# Tokenize data
+blogs_tok <- txt.to.words(blogs_corp)
+news_tok <- txt.to.words(news_corp)
+tweets_tok <- txt.to.words(tweets_corp)
+
+
+# Make 2-, 3- and 4-grams
+blogs_tok_2 <- make.ngrams(blogs_tok, ngram.size = 2); blogs_tok_3 <- make.ngrams(blogs_tok, ngram.size = 3); blogs_tok_4 <- make.ngrams(blogs_tok, ngram.size = 4)
+
+news_tok_2 <- make.ngrams(news_tok, ngram.size = 2); news_tok_3 <- make.ngrams(news_tok, ngram.size = 3); news_tok_4 <- make.ngrams(news_tok, ngram.size = 4)
+
+tweets_tok_2 <- make.ngrams(tweets_tok, ngram.size = 2); tweets_tok_3 <- make.ngrams(tweets_tok, ngram.size = 3); tweets_tok_4 <- make.ngrams(tweets_tok, ngram.size = 4)
+
+# Clean up
+rm(blogs_corp); rm(news_corp); rm(tweets_corp)
+
+```
+
+
+Next, we build word lists and frequency tables. These will allow us to get an initial idea of highly frequent sequences against which we can subsequently test our text prediction models.
+
+
+```{r}
+
+# Make word lists and frequency tables
+
+## Blogs
+blogs_words = names(sort(table(unlist(blogs_tok)), decreasing = TRUE)); blogs_words_2 = names(sort(table(unlist(blogs_tok_2)), decreasing = TRUE)); blogs_words_3 = names(sort(table(unlist(blogs_tok_3)), decreasing = TRUE)); blogs_words_4 = names(sort(table(unlist(blogs_tok_4)), decreasing = TRUE)) 
+
+## News
+news_words = names(sort(table(unlist(news_tok)), decreasing = TRUE)); news_words_2 = names(sort(table(unlist(news_tok_2)), decreasing = TRUE)); news_words_3 = names(sort(table(unlist(news_tok_3)), decreasing = TRUE)); news_words_4 = names(sort(table(unlist(news_tok_4)), decreasing = TRUE))
+
+## Tweets
+tweets_words = names(sort(table(unlist(tweets_tok)), decreasing = TRUE)); tweets_words_2 = names(sort(table(unlist(tweets_tok_2)), decreasing = TRUE)); tweets_words_3 = names(sort(table(unlist(tweets_tok_3)), decreasing = TRUE)); tweets_words_4 = names(sort(table(unlist(tweets_tok_4)), decreasing = TRUE))
+
+
+## 1-gram frequency tables
+blogs_freq_tab_1 <- make.table.of.frequencies(blogs_tok, blogs_words, relative = FALSE); news_freq_tab_1 <- make.table.of.frequencies(news_tok, news_words, relative = FALSE); tweets_freq_tab_1 <- make.table.of.frequencies(tweets_tok, tweets_words, relative = FALSE)
+
+## 2-gram frequency tables
+blogs_freq_tab_2 <- make.table.of.frequencies(blogs_tok_2, blogs_words_2, relative = FALSE); news_freq_tab_2 <- make.table.of.frequencies(news_tok_2, news_words_2, relative = FALSE); tweets_freq_tab_2 <- make.table.of.frequencies(tweets_tok_2, tweets_words_2, relative = FALSE)
+
+## 3-gram frequency tables
+blogs_freq_tab_3 <- make.table.of.frequencies(blogs_tok_3, blogs_words_3, relative = FALSE); news_freq_tab_3 <- make.table.of.frequencies(news_tok_3, news_words_3, relative = FALSE); tweets_freq_tab_3 <- make.table.of.frequencies(tweets_tok_3, tweets_words_3, relative = FALSE)
+
+## 4-gram frequency tables
+blogs_freq_tab_4 <- make.table.of.frequencies(blogs_tok_4, blogs_words_4, relative = FALSE); news_freq_tab_4 <- make.table.of.frequencies(news_tok_4, news_words_4, relative = FALSE); tweets_freq_tab_4 <- make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE)
+                                        
+
+# Combine frequency tables
+
+
+
+
+```
+                                                                                                                                                                                                  
+                                                    

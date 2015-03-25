@@ -19,81 +19,220 @@ Initially, we download the data and unzip the data files, switching working dire
 ```{r}
 require("downloader"); require("R.utils")
 
-# download, unzip data and setwd()
+# Download, unzip data and setwd()
 url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
 download(url, dest = "data.zip", mode = "wb")
 unzip("data.zip", exdir = "./")
 
-# set working directory
+# Set working directory
 setwd(paste(getwd(),"/final/en_US",sep=""))
 list.files()
 
-# get an idea of corpora sizes in lines
+# Get an idea of corpora sizes in lines
 as.numeric(countLines("en_US.blogs.txt"))
 as.numeric(countLines("en_US.news.txt"))
 as.numeric(countLines("en_US.twitter.txt"))
 
-# get an idea of corpora sizes in terms of memory
+# Get an idea of corpora sizes in terms of memory
 file.info("en_US.blogs.txt")$size
 ```
 
 ### Data Sampling
 
-Seeing the large size of the corpora and cognizant of the fact that a representative sample is sufficient for model building, we next take a random subsample of the data. We first compute the n necessary for a representative sample size, then we draw a random sample from each of the corpora.
+Seeing the large size of the corpora and cognizant of the fact that a representative sample is sufficient for model building, we next take a random subsample of the data. We first compute the n necessary for a representative sample size, then we draw a random sample from each of the corpora. 
 
 ```{r}
 require("stats")
 
-# make new folders for samples
-dir.create(path = "./samples/")
-dir.create(path = "./samples/blogs")
-dir.create(path = "./samples/news")
-dir.create(path = "./samples/tweets")
-
-# compute sample size needed
+# Compute sample size needed
 sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05)$n, digits = 0)
 
-# make samples, clean them, then write them out for subsequent corpus creation
+# Make samples
 
-# blogs
-blogs <- readLines("en_US.blogs.txt", encoding="UTF-8")
+# Blogs
+blogs <- readLines("en_US.blogs.txt")
 blogs_sample <- sample(blogs, sample_size)
-blogs_sample_clean <- iconv(blogs_sample, from="UTF-8", to="latin1", sub=" ")
-write(blogs_sample_clean, file = "./samples/blogs/blogs_sample.txt")
 
-# news
-news <- readLines("en_US.news.txt", encoding="UTF-8")
+# News
+news <- readLines("en_US.news.txt")
 news_sample <- sample(news, sample_size)
-news_sample_clean <- iconv(news_sample, from="UTF-8", to="latin1", sub=" ")
-write(news_sample_clean, file = "./samples/news/news_sample.txt")
 
-# tweets
-tweets <- readLines("en_US.twitter.txt", encoding="UTF-8", skipNul = TRUE)
+# Tweets
+tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
 tweets_sample <- sample(tweets, sample_size)
-tweets_sample_clean <- iconv(tweets_sample, from="UTF-8", to="latin1", sub=" ")
-write(tweets_sample_clean, file = "./samples/tweets/tweets_sample.txt")
+
+# Clean up
+rm(blogs); rm(news); rm(tweets)
+
 ```
 
 
-### Corpus Creation and Profanity Removal
+### Corpus Cleaning and Profanity Removal
 
-Next, we build the corpora for the three samples (blogs vs. news vs. tweets) using R's text mining package [tm] (http://cran.r-project.org/web/packages/tm/index.html).
+For corpus creation, we first clean up our corpora by removing upper-case letters, numbers, punctuation and leading/trailing spaces from our corpora. Next, we extract profanity. 
 
 ```{r}
-require("tm")
+require("stringr")
 
-# build corpora from samples
-blogs_corpus  <-Corpus(DirSource("./samples/blogs"), readerControl = list(language="lat"))
-news_corpus  <-Corpus(DirSource("./samples/news"), readerControl = list(language="lat"))
-tweets_corpus  <-Corpus(DirSource("./samples/tweets"), readerControl = list(language="lat"))
+# Remove case
+blogs_low <- tolower(blogs_sample); news_low <- tolower(news_sample); tweets_low <- tolower(tweets_sample)
+
+# Remove numbers
+blogs_samp_clean <- str_replace_all(blogs_low, "[[:digit:]]", ""); news_samp_clean <- str_replace_all(news_low, "[[:digit:]]", ""); tweets_samp_clean <- str_replace_all(tweets_low, "[[:digit:]]", "")
+                                    
+# Remove punctuation, double hyphens and leading / trailing spaces
+## Blogs
+blogs_samp_clean2 <- gsub("[[:punct:]]", "", blogs_samp_clean, perl=TRUE)
+blogs_samp_clean3 <- gsub("--", "", blogs_samp_clean2)
+blogs_samp_clean4 <- gsub("^ *|(?<= ) | *$", "", blogs_samp_clean3, perl=TRUE)
+
+## News
+news_samp_clean2 <- gsub("[[:punct:]]", "", news_samp_clean, perl=TRUE)
+news_samp_clean3 <- gsub("--", "", news_samp_clean2)
+news_samp_clean4 <- gsub("^ *|(?<= ) | *$", "", news_samp_clean3, perl=TRUE)
+
+## Tweets
+tweets_samp_clean2 <- gsub("[[:punct:]]", "", tweets_samp_clean, perl=TRUE)
+tweets_samp_clean3 <- gsub("--", "", tweets_samp_clean2)
+tweets_samp_clean4 <- gsub("^ *|(?<= ) | *$", "", tweets_samp_clean3, perl=TRUE)
+
+# Remove profanity
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+blogs_samp_clean_prof <- as.data.frame(sapply(blogs_samp_clean4, function(x) 
+    gsub(paste(profanity_list, collapse = '|'), '', x)))
+news_samp_clean_prof <- as.data.frame(sapply(news_samp_clean4, function(x) 
+    gsub(paste(profanity_list, collapse = '|'), '', x)))
+tweets_samp_clean_prof <- as.data.frame(sapply(tweets_samp_clean4, function(x) 
+    gsub(paste(profanity_list, collapse = '|'), '', x)))
+
+# Clean up
+rm(blogs_low); rm(news_low); rm(tweets_low)
+rm(blogs_samp_clean); rm(news_samp_clean); rm(tweets_samp_clean)
+
+rm(blogs_samp_clean2); rm(blogs_samp_clean3); rm(blogs_samp_clean4)
+rm(news_samp_clean2); rm(news_samp_clean3); rm(news_samp_clean4)
+rm(tweets_samp_clean2); rm(tweets_samp_clean3); rm(tweets_samp_clean4)
+
+```
+
+### Corpus Cleaning and Tokenization
+
+Next, we tokenize the three samples using a customized tokenization and n-gram building [function] (https://github.com/zero323/r-snippets/blob/master/R/ngram_tokenizer.R) built by Maciej Szymkiewicz. The function is then used to build bigrams, trigrams and 4-grams.
+
+```{r}
+require("stylo")
+
+
+blogs_samp <- load.corpus(corpus.dir = "samples/blogs", files = "blogs_sample.txt")
+news_samp <- load.corpus(corpus.dir = "samples/news", files = "news_sample.txt")
+tweets_samp <- load.corpus(corpus.dir = "samples/tweets", files = "tweets_sample.txt")
+
+
+
+# ngram_tokenizer function
+
+ngram_tokenizer <- function(n = 1L, skip_word_none = TRUE, skip_word_number = FALSE) {
+    stopifnot(is.numeric(n), is.finite(n), n > 0)
+    
+    #' To avoid :: calls
+    stri_split_boundaries <- stringi::stri_split_boundaries
+    stri_join <- stringi::stri_join
+    
+    options <- stringi::stri_opts_brkiter(
+        type="word", skip_word_none = skip_word_none, skip_word_number = skip_word_number
+    )
+    
+    #' Tokenizer
+    #' 
+    #' @param x character
+    #' @return character vector with n-grams
+    function(x) {
+        stopifnot(is.character(x))
+    
+        # Split into word tokens
+        tokens <- unlist(stri_split_boundaries(x, opts_brkiter=options))
+        len <- length(tokens)
+    
+        if(all(is.na(tokens)) || len < n) {
+            # If we didn't detect any words or number of tokens is less than n return empty vector
+            character(0)
+        } else {
+            sapply(
+                1:max(1, len - n + 1),
+                function(i) stri_join(tokens[i:min(len, i + n - 1)], collapse = " ")
+            )
+        }
+    }
+}
+
+ngram_tokenizer
+
+
+
+```
+
+
+
+
+Next, we tokenize the three samples (blogs vs. news vs. tweets) using R's [stylo] (https://sites.google.com/site/computationalstylistics/stylo) package, building unigrams, bigrams, trigrams and 4-grams.
+
+# Make 1, 2- , 3- and 4-grams for each corpus; then order, combine and print them
+## Blogs
+blogs_samp_tok_uni <- make.ngrams(blogs_samp_clean_prof, ngram.size = 1); blogs_samp_tok_bi <- make.ngrams(blogs_samp_tok, ngram.size = 2); blogs_samp_tok_tri <- make.ngrams(blogs_samp_tok, ngram.size = 3); blogs_samp_tok_4 <- make.ngrams(blogs_samp_tok, ngram.size = 4)
+
+
+
+
+
+
+# Build corpora 
+samples_corp <- load.corpus.and.parse(files = c("blogs_sample.txt", "news_sample.txt", "tweets_sample.txt"), corpus.dir = "samples", markup.type = "plain", language = "English.all", ngram.size = "1", preserve.case = FALSE)
+
+
+
+
+
+# Remove numbers and punctuation 
+samples_clean.1 <- gsub('[[:digit:]]+', '', samples_clean)
+samples_clean.2 <- gsub('[^[:alnum:][:space:]]', '', samples_clean.1)
+
+# Build 2-, 3- and 4-gram models
+
+
+
+# Further cleaning
+corpus_clean.1 <- tm_map(corpus_clean, removeNumbers)
+corpus_clean.2 <- tm_map(corpus_clean.1, removePunctuation)
+corpus_clean.3 <- tm_map(corpus_clean.2 , stripWhitespace)
+
+# Export tm corpus object to a dataframe for n-gram building in stylo
+
+
+# Build unigram corpora from samples and clean 
+samples1 <- load.corpus.and.parse(files = c("blogs_sample.txt", "news_sample.txt", "tweets_sample.txt"), corpus.dir = "samples", markup.type = "plain", language = "English.all", ngram.size = "1", preserve.case = FALSE)
+
+# Remove profanity
+profanity_list <- as.character(readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE))
+samples1_clean <- delete.stop.words(samples1, stop.words = profanity_list(language = "English"))
+
+# Build 2-, 3- and 4- gram corpora from samples, tokenizing and cleaning
+blogs_samp_tok_bi <- make.ngrams(samples1$blogs_sample, ngram.size = 2); 
+                                 
+                                 _uni$blogs_sample.txt, ngram.size = 2); blogs_samp_tok_tri <- make.ngrams(blogs_samp_tok, ngram.size = 3); blogs_samp_tok_4 <- make.ngrams(blogs_samp_tok, ngram.size = 4)
+
+news_samp_tok_uni <- make.ngrams(news_samp_tok, ngram.size = 1); news_samp_tok_bi <- make.ngrams(news_samp_tok, ngram.size = 2); news_samp_tok_tri <- make.ngrams(news_samp_tok, ngram.size = 3); news_samp_tok_4 <- make.ngrams(news_samp_tok, ngram.size = 4)
+
+tweets_samp_tok_uni <- make.ngrams(tweets_samp_tok, ngram.size = 1); tweets_samp_tok_bi <- make.ngrams(tweets_samp_tok, ngram.size = 2); tweets_samp_tok_tri <- make.ngrams(tweets_samp_tok, ngram.size = 3); tweets_samp_tok_4 <- make.ngrams(tweets_samp_tok, ngram.size = 4)
+
 
 # clean corpora for model building
 # blogs cleaning
 
-blogs_corpus.1 <- tm_map(blogs_corpus, removeNumbers)
-blogs_corpus.2 <- tm_map(blogs_corpus.1, removePunctuation); blog_corpus.2 <- gsub("’", "'", blogs_corpus.2)
-blogs_corpus.3 <- tm_map(blogs_corpus.2 , stripWhitespace)
-blogs_corpus.4 <- tm_map(blogs_corpus.3, content_transformer(tolower))
+blogs_corpus.2 <- tm_map(blogs_corpus.1, removeNumbers)
+blogs_corpus.3 <- tm_map(blogs_corpus.2, removePunctuation)
+blogs_corpus.4 <- tm_map(blogs_corpus.3 , stripWhitespace)
+
 
 # blogs profanity removal, convert corpus to dataframe object
 profanity_list <- VectorSource(readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE))
@@ -190,6 +329,7 @@ tweets_samp_tok_4_freq_tab = make.table.of.frequencies(tweets_samp_tok_4, tweets
 
 blogs_samp_freq <- cbind()
 blogs_samp_tok_uni_freq_tab = make.table.of.frequencies(blogs_samp_tok_uni, blogs_samp_tok_uni_freq)
+blogs_corpus.1 <- replace_contraction(blogs_corpus, contraction = qdapDictionaries::contractions, ignore.case = TRUE)
 
 ```
 
