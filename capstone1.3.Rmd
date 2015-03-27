@@ -50,7 +50,7 @@ sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05
 # n = 9345
 
 # Read in data
-blogs <- readLines("en_US.blogs.txt"); news <- readLines("en_US.blogs.txt"); tweets <- readLines("en_US.blogs.txt", skipNul = TRUE)
+blogs <- readLines("en_US.blogs.txt"); news <- readLines("en_US.news.txt"); tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
 
 # Get an idea of approximate word counts
 blogs_word_count <- length(strsplit(blogs, " "))
@@ -67,6 +67,7 @@ tweets_samp <- sample(tweets, sample_size)
 
 # Clean up
 rm(sample_size); rm(blogs); rm(news); rm(tweets)
+rm(blogs_word_count); rm(news_word_count); rm(tweets_word_count)
 ```
 
 
@@ -204,6 +205,9 @@ tweets_freq_tab_3 <- data.frame(tweets_words_3, tweets_freq_3); names(tweets_fre
 tweets_freq_4 <- as.numeric(make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE))
 tweets_freq_tab_4 <- data.frame(tweets_words_4, tweets_freq_4); names(tweets_freq_tab_4) <- c(x_name, y_name)
 
+# Histograms of n-grams 
+
+
 
 # Clean up
 rm(x_name); rm(y_name)
@@ -213,11 +217,11 @@ rm(blogs_freq_1); rm(blogs_freq_2); rm(blogs_freq_3); rm(blogs_freq_4)
 
 rm(news_tok); rm(news_tok_2); rm(news_tok_3); rm(news_tok_4)
 rm(news_words); rm(news_words_2); rm(news_words_3); rm(news_words_4)
-rm(news_tok); rm(news_freq_1); rm(news_freq_2); rm(news_freq_3); rm(news_freq_4)
+rm(news_freq_1); rm(news_freq_2); rm(news_freq_3); rm(news_freq_4)
 
 rm(tweets_tok); rm(tweets_tok_2); rm(tweets_tok_3); rm(tweets_tok_4)
 rm(tweets_words); rm(tweets_words_2); rm(tweets_words_3); rm(tweets_words_4)
-rm(tweets_tok); rm(tweets_freq_1); rm(tweets_freq_2); rm(tweets_freq_3); rm(tweets_freq_4)
+rm(tweets_freq_1); rm(tweets_freq_2); rm(tweets_freq_3); rm(tweets_freq_4)
 
 ```
                                                                                                                                                                                                   
