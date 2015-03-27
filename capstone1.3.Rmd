@@ -32,9 +32,6 @@ as.numeric(countLines("en_US.blogs.txt"))
 as.numeric(countLines("en_US.news.txt"))
 as.numeric(countLines("en_US.twitter.txt"))
 
-# Get an idea of corpora sizes in terms of memory
-file.info("en_US.blogs.txt")$size
-
 # Clean up
 rm(url)
 ```
@@ -54,6 +51,14 @@ sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05
 
 # Read in data
 blogs <- readLines("en_US.blogs.txt"); news <- readLines("en_US.blogs.txt"); tweets <- readLines("en_US.blogs.txt", skipNul = TRUE)
+
+# Get an idea of approximate word counts
+blogs_word_count <- length(strsplit(blogs, " "))
+print(blogs_word_count)
+news_word_count <- length(strsplit(news, " "))
+print(news_word_count)
+tweets_word_count <- length(strsplit(tweets, " "))
+print(tweets_word_count)
 
 # Make samples
 blogs_samp <- sample(blogs, sample_size)
@@ -79,7 +84,7 @@ profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt"
 
 ## Blogs
 blogs_samp_1 <- tolower(blogs_samp)
-blogs_samp_2 <- str_replace_all(blogs_samp_1, "[^[:alnum:]]", " ")
+blogs_samp_2 <- str_replace_all(blogs_samp_1, "[^[:alnum:]]", " "); blogs_samp_2 <- iconv(blogs_samp_2, from="UTF-8", to="ascii", sub=""); blogs_samp_2 <- iconv(blogs_samp_2, to="ASCII//TRANSLIT")
 blogs_samp_3 <- str_replace_all(blogs_samp_2, "[[:digit:]]+", " ")
 blogs_samp_4 <- str_replace_all(blogs_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
 blogs_samp_5 <- str_replace_all(blogs_samp_4, "  ", replacement = " ")
@@ -87,7 +92,7 @@ write.table(blogs_samp_5, file = "./samples/blogs_sample.txt")
 
 ## News
 news_samp_1 <- tolower(news_samp)
-news_samp_2 <- str_replace_all(news_samp_1, "[^[:alnum:]]", " ")
+news_samp_2 <- str_replace_all(news_samp_1, "[^[:alnum:]]", " "); news_samp_2 <- iconv(news_samp_2, from="UTF-8", to="ascii", sub=""); news_samp_2 <- iconv(blogs_samp_2, to="ASCII//TRANSLIT")
 news_samp_3 <- str_replace_all(news_samp_2, "[[:digit:]]+", " ")
 news_samp_4 <- str_replace_all(news_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
 news_samp_5 <- str_replace_all(news_samp_4, "  ", replacement = " ")
@@ -95,7 +100,7 @@ write.table(news_samp_5, file = "./samples/news_sample.txt")
 
 ## Tweets
 tweets_samp_1 <- tolower(tweets_samp)
-tweets_samp_2 <- str_replace_all(tweets_samp_1, "[^[:alnum:]]", " ")
+tweets_samp_2 <- str_replace_all(tweets_samp_1, "[^[:alnum:]]", " "); tweets_samp_2 <- iconv(tweets_samp_2, from="UTF-8", to="ascii", sub=""); tweets_samp_2 <- iconv(tweets_samp_2, to="ASCII//TRANSLIT")
 tweets_samp_3 <- str_replace_all(tweets_samp_2, "[[:digit:]]+", " ")
 tweets_samp_4 <- str_replace_all(tweets_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
 tweets_samp_5 <- str_replace_all(tweets_samp_4, "  ", replacement = " ")
@@ -103,13 +108,13 @@ write.table(tweets_samp_5, file = "./samples/tweets_sample.txt")
 
 ## Clean up
 rm(profanity_list)
-rm(blogs_samp); rm(blogs_samp_1); rm(blogs_samp_2); rm(blogs_samp_3); rm(blogs_samp_4)
-rm(news_samp); rm(news_samp_1); rm(news_samp_2); rm(news_samp_3); rm(news_samp_4)
-rm(tweets_samp); rm(tweets_samp_1); rm(tweets_samp_2); rm(tweets_samp_3); rm(tweets_samp_4)
+rm(blogs_samp); rm(blogs_samp_1); rm(blogs_samp_2); rm(blogs_samp_3); rm(blogs_samp_4); rm(blogs_samp_5)
+rm(news_samp); rm(news_samp_1); rm(news_samp_2); rm(news_samp_3); rm(news_samp_4); rm(news_samp_5)
+rm(tweets_samp); rm(tweets_samp_1); rm(tweets_samp_2); rm(tweets_samp_3); rm(tweets_samp_4); rm(tweets_samp_5)
 
 ```
 
-## Stylo Corpus Building, tokenization and n-gram construction
+## Tokenization and n-gram construction
 
 In the next step of data processing, we load the 3 samples into R's [stylo] (https://sites.google.com/site/computationalstylistics/stylo) package. This initial step also tokenizes the data, then allows us to build unigrams, bigrams, trigrams and 4-grams. 
 
@@ -148,34 +153,73 @@ Next, we build word lists and frequency tables. These will allow us to get an in
 
 # Make word lists and frequency tables
 
-## Blogs
+## Blogs sorted word lists
 blogs_words = names(sort(table(unlist(blogs_tok)), decreasing = TRUE)); blogs_words_2 = names(sort(table(unlist(blogs_tok_2)), decreasing = TRUE)); blogs_words_3 = names(sort(table(unlist(blogs_tok_3)), decreasing = TRUE)); blogs_words_4 = names(sort(table(unlist(blogs_tok_4)), decreasing = TRUE)) 
 
-## News
+## News sorted word lists
 news_words = names(sort(table(unlist(news_tok)), decreasing = TRUE)); news_words_2 = names(sort(table(unlist(news_tok_2)), decreasing = TRUE)); news_words_3 = names(sort(table(unlist(news_tok_3)), decreasing = TRUE)); news_words_4 = names(sort(table(unlist(news_tok_4)), decreasing = TRUE))
 
-## Tweets
+## Tweets sorted word lists
 tweets_words = names(sort(table(unlist(tweets_tok)), decreasing = TRUE)); tweets_words_2 = names(sort(table(unlist(tweets_tok_2)), decreasing = TRUE)); tweets_words_3 = names(sort(table(unlist(tweets_tok_3)), decreasing = TRUE)); tweets_words_4 = names(sort(table(unlist(tweets_tok_4)), decreasing = TRUE))
 
 
-## 1-gram frequency tables
-blogs_freq_tab_1 <- make.table.of.frequencies(blogs_tok, blogs_words, relative = FALSE); news_freq_tab_1 <- make.table.of.frequencies(news_tok, news_words, relative = FALSE); tweets_freq_tab_1 <- make.table.of.frequencies(tweets_tok, tweets_words, relative = FALSE)
+## Blogs frequency counts and tables
+x_name <- "grams"; y_name <- "frequency"
 
-## 2-gram frequency tables
-blogs_freq_tab_2 <- make.table.of.frequencies(blogs_tok_2, blogs_words_2, relative = FALSE); news_freq_tab_2 <- make.table.of.frequencies(news_tok_2, news_words_2, relative = FALSE); tweets_freq_tab_2 <- make.table.of.frequencies(tweets_tok_2, tweets_words_2, relative = FALSE)
+blogs_freq_1 <- as.numeric(make.table.of.frequencies(blogs_tok, blogs_words, relative = FALSE))
+blogs_freq_tab_1 <- data.frame(blogs_words, blogs_freq_1); names(blogs_freq_tab_1) <- c(x_name, y_name)
 
-## 3-gram frequency tables
-blogs_freq_tab_3 <- make.table.of.frequencies(blogs_tok_3, blogs_words_3, relative = FALSE); news_freq_tab_3 <- make.table.of.frequencies(news_tok_3, news_words_3, relative = FALSE); tweets_freq_tab_3 <- make.table.of.frequencies(tweets_tok_3, tweets_words_3, relative = FALSE)
+blogs_freq_2 <- as.numeric(make.table.of.frequencies(blogs_tok_2, blogs_words_2, relative = FALSE))
+blogs_freq_tab_2 <- data.frame(blogs_words_2, blogs_freq_2); names(blogs_freq_tab_2) <- c(x_name, y_name)
 
-## 4-gram frequency tables
-blogs_freq_tab_4 <- make.table.of.frequencies(blogs_tok_4, blogs_words_4, relative = FALSE); news_freq_tab_4 <- make.table.of.frequencies(news_tok_4, news_words_4, relative = FALSE); tweets_freq_tab_4 <- make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE)
-                                        
+blogs_freq_3 <- as.numeric(make.table.of.frequencies(blogs_tok_3, blogs_words_3, relative = FALSE))
+blogs_freq_tab_3 <- data.frame(blogs_words_3, blogs_freq_3); names(blogs_freq_tab_3) <- c(x_name, y_name)
 
-# Combine frequency tables
+blogs_freq_4 <- as.numeric(make.table.of.frequencies(blogs_tok_4, blogs_words_4, relative = FALSE))
+blogs_freq_tab_4 <- data.frame(blogs_words_4, blogs_freq_4); names(blogs_freq_tab_4) <- c(x_name, y_name)
+
+## News frequency counts
+news_freq_1 <- as.numeric(make.table.of.frequencies(news_tok, news_words, relative = FALSE))
+news_freq_tab_1 <- data.frame(news_words, news_freq_1); names(news_freq_tab_1) <- c(x_name, y_name)
+
+news_freq_2 <- as.numeric(make.table.of.frequencies(news_tok_2, news_words_2, relative = FALSE))
+news_freq_tab_2 <- data.frame(news_words_2, news_freq_2); names(news_freq_tab_2) <- c(x_name, y_name)
+
+news_freq_3 <- as.numeric(make.table.of.frequencies(news_tok_3, news_words_3, relative = FALSE))
+news_freq_tab_3 <- data.frame(news_words_3, news_freq_3); names(news_freq_tab_3) <- c(x_name, y_name)
+
+news_freq_4 <- as.numeric(make.table.of.frequencies(news_tok_4, news_words_4, relative = FALSE))
+news_freq_tab_4 <- data.frame(news_words_4, news_freq_4); names(news_freq_tab_4) <- c(x_name, y_name)
+
+## Tweets frequency counts
+tweets_freq_1 <- as.numeric(make.table.of.frequencies(tweets_tok, tweets_words, relative = FALSE))
+tweets_freq_tab_1 <- data.frame(tweets_words, tweets_freq_1); names(tweets_freq_tab_1) <- c(x_name, y_name)
+
+tweets_freq_2 <- as.numeric(make.table.of.frequencies(tweets_tok_2, tweets_words_2, relative = FALSE))
+tweets_freq_tab_2 <- data.frame(tweets_words_2, tweets_freq_2); names(tweets_freq_tab_2) <- c(x_name, y_name)
+
+tweets_freq_3 <- as.numeric(make.table.of.frequencies(tweets_tok_3, tweets_words_3, relative = FALSE))
+tweets_freq_tab_3 <- data.frame(tweets_words_3, tweets_freq_3); names(tweets_freq_tab_3) <- c(x_name, y_name)
+
+tweets_freq_4 <- as.numeric(make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE))
+tweets_freq_tab_4 <- data.frame(tweets_words_4, tweets_freq_4); names(tweets_freq_tab_4) <- c(x_name, y_name)
 
 
+# Clean up
+rm(x_name); rm(y_name)
+rm(blogs_tok); rm(blogs_tok_2); rm(blogs_tok_3); rm(blogs_tok_4)
+rm(blogs_words); rm(blogs_words_2); rm(blogs_words_3); rm(blogs_words_4)
+rm(blogs_freq_1); rm(blogs_freq_2); rm(blogs_freq_3); rm(blogs_freq_4)
 
+rm(news_tok); rm(news_tok_2); rm(news_tok_3); rm(news_tok_4)
+rm(news_words); rm(news_words_2); rm(news_words_3); rm(news_words_4)
+rm(news_tok); rm(news_freq_1); rm(news_freq_2); rm(news_freq_3); rm(news_freq_4)
+
+rm(tweets_tok); rm(tweets_tok_2); rm(tweets_tok_3); rm(tweets_tok_4)
+rm(tweets_words); rm(tweets_words_2); rm(tweets_words_3); rm(tweets_words_4)
+rm(tweets_tok); rm(tweets_freq_1); rm(tweets_freq_2); rm(tweets_freq_3); rm(tweets_freq_4)
 
 ```
                                                                                                                                                                                                   
-                                                    
+
+## Modeling 
