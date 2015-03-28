@@ -202,8 +202,12 @@ tweets_freq_tab_3 <- data.frame(tweets_words_3, tweets_freq_3); names(tweets_fre
 
 tweets_freq_4 <- as.numeric(make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE))
 tweets_freq_tab_4 <- data.frame(tweets_words_4, tweets_freq_4); names(tweets_freq_tab_4) <- c(x_name, y_name)
+```
 
+Finally, we build barplots of some of the most frequent n-grams.
 
+```{r}
+require(ggplot2)
 
 # Barplots of frequent n-grams in several corpora
 

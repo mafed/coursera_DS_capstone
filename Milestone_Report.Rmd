@@ -46,7 +46,7 @@ rm(url); rm(blogs_word_count); rm(news_word_count); rm(tweets_word_count)
 ```
 
 
-### Sampling 
+## Sampling 
 
 Seeing the size of the data set, we elect to take a random sample of a size sufficient to guarantee representativeness. 
 
@@ -64,40 +64,27 @@ length(news_samp)
 tweets_samp <- sample(tweets, sample_size)
 length(tweets_samp)
 
-# Write samples out:: do I need to do this? XXX
-write.table(blogs_samp, file = "blogs_sample.txt")
-write.table(news_samp, file = "news_sample.txt")
-write.table(tweets_samp, file = "tweets_sample.txt")
-
 # Clean up
-rm(sample_size); rm(blogs); rm(news); rm(tweets)
+rm(sample_size); rm(blogs); rm(news); rm(tweets); rm(news_samp); rm(tweets_samp)
 
 ```
 
 
 ## Major Features of the Data 
 
-With a more manageable sampled subset of the data, we briefly look at some of the more / challenging (for our project) features of the data. In order to get an idea of such features, we look at the last 10 lines in the sample drawn from the blogs sample, the first 10 lines from news sample and the last 10 lines of the Twitter sample.
+With a more manageable sampled subset of the data, we briefly look at some of the more / challenging (for our project) features of the data. In order to get an idea of such features, we  look at the last 5 lines in the sample drawn from the blogs sample.
 
 ```{r}
-tail(blogs_samp, n = 10)
-```
-
-### WHAT DO WE SEE THAT IS INTERESTING FOR THIS PROJECT?
-
-head(news_samp, n = 10)
-tail(tweets_samp, n = 10)
-
+tail(blogs_samp, n = 5)
 ```
 
 
+For the purposes of text prediction, these 10 lines reveal the presence of several types of characters that should be eliminated as they shouldn't be predicted. These include punctuation, quotation marks and digits. Furthermore, this and the three other samples are likely to contain non-English characters, emoticons, curse words and other things we wouldn't like to predict. As such, we clean the samples. The current report illustrates this cleaning, and subsequent analyses, with the **blogs** corpus sample. The following block of code does so, displaying the first 5 lines of the _cleaned_ blog sample. 
 
 
+```{r echo = FALSE}
+suppressPackageStartupMessages(require("stringr"))
 
-```{r}
-require("stringr")
-
-# Data cleaning
 profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
 
 ## Blogs
@@ -106,29 +93,99 @@ blogs_samp_2 <- str_replace_all(blogs_samp_1, "[^[:alnum:]]", " "); blogs_samp_2
 blogs_samp_3 <- str_replace_all(blogs_samp_2, "[[:digit:]]+", " ")
 blogs_samp_4 <- str_replace_all(blogs_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
 blogs_samp_5 <- str_replace_all(blogs_samp_4, "  ", replacement = " ")
-write.table(blogs_samp_5, file = "./samples/blogs_sample.txt")
+head(blogs_samp_5, n = 5)
+write.table(blogs_samp_5, file = "blogs_sample.txt")
 
-## News
-news_samp_1 <- tolower(news_samp)
-news_samp_2 <- str_replace_all(news_samp_1, "[^[:alnum:]]", " "); news_samp_2 <- iconv(news_samp_2, from="UTF-8", to="ascii", sub=""); news_samp_2 <- iconv(blogs_samp_2, to="ASCII//TRANSLIT")
-news_samp_3 <- str_replace_all(news_samp_2, "[[:digit:]]+", " ")
-news_samp_4 <- str_replace_all(news_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
-news_samp_5 <- str_replace_all(news_samp_4, "  ", replacement = " ")
-write.table(news_samp_5, file = "./samples/news_sample.txt")
-
-## Tweets
-tweets_samp_1 <- tolower(tweets_samp)
-tweets_samp_2 <- str_replace_all(tweets_samp_1, "[^[:alnum:]]", " "); tweets_samp_2 <- iconv(tweets_samp_2, from="UTF-8", to="ascii", sub=""); tweets_samp_2 <- iconv(tweets_samp_2, to="ASCII//TRANSLIT")
-tweets_samp_3 <- str_replace_all(tweets_samp_2, "[[:digit:]]+", " ")
-tweets_samp_4 <- str_replace_all(tweets_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
-tweets_samp_5 <- str_replace_all(tweets_samp_4, "  ", replacement = " ")
-write.table(tweets_samp_5, file = "./samples/tweets_sample.txt")
-
-## Clean up
 rm(profanity_list)
 rm(blogs_samp); rm(blogs_samp_1); rm(blogs_samp_2); rm(blogs_samp_3); rm(blogs_samp_4); rm(blogs_samp_5)
-rm(news_samp); rm(news_samp_1); rm(news_samp_2); rm(news_samp_3); rm(news_samp_4); rm(news_samp_5)
-rm(tweets_samp); rm(tweets_samp_1); rm(tweets_samp_2); rm(tweets_samp_3); rm(tweets_samp_4); rm(tweets_samp_5)
 
 ```
 
+## Tokenization, n-gram construction and initial visual data exploration
+
+The next step is to tokenize and build n-grams, which we will then use to predict the posterior probability of a word given the previous context. We have chosen to use R's [stylo] (https://sites.google.com/site/computationalstylistics/stylo) package to tokenize and produce n-grams. The following code does so for the _blogs_ sample, then displays the 20 most common 1-, 2-, 3- and 4-grams in that sample.
+
+```{r echo = FALSE}
+suppressPackageStartupMessages(require("stylo")); suppressPackageStartupMessages(require("ggplot2"))
+
+# Build corpus, tokenize and produce n-grams
+blogs_corp <- load.corpus(files = "blogs_sample.txt")
+blogs_tok <- txt.to.words(blogs_corp)
+
+blogs_tok_2 <- make.ngrams(blogs_tok, ngram.size = 2); blogs_tok_3 <- make.ngrams(blogs_tok, ngram.size = 3); blogs_tok_4 <- make.ngrams(blogs_tok, ngram.size = 4)
+
+# Build word lists for n-grams
+blogs_words = names(sort(table(unlist(blogs_tok)), decreasing = TRUE)); blogs_words_2 = names(sort(table(unlist(blogs_tok_2)), decreasing = TRUE)); blogs_words_3 = names(sort(table(unlist(blogs_tok_3)), decreasing = TRUE)); blogs_words_4 = names(sort(table(unlist(blogs_tok_4)), decreasing = TRUE)) 
+
+# Build frequency counts and tables
+x_name <- "grams"; y_name <- "frequency"
+
+blogs_freq_1 <- as.numeric(make.table.of.frequencies(blogs_tok, blogs_words, relative = FALSE))
+blogs_freq_tab_1 <- data.frame(blogs_words, blogs_freq_1); names(blogs_freq_tab_1) <- c(x_name, y_name)
+
+blogs_freq_2 <- as.numeric(make.table.of.frequencies(blogs_tok_2, blogs_words_2, relative = FALSE))
+blogs_freq_tab_2 <- data.frame(blogs_words_2, blogs_freq_2); names(blogs_freq_tab_2) <- c(x_name, y_name)
+
+blogs_freq_3 <- as.numeric(make.table.of.frequencies(blogs_tok_3, blogs_words_3, relative = FALSE))
+blogs_freq_tab_3 <- data.frame(blogs_words_3, blogs_freq_3); names(blogs_freq_tab_3) <- c(x_name, y_name)
+
+blogs_freq_4 <- as.numeric(make.table.of.frequencies(blogs_tok_4, blogs_words_4, relative = FALSE))
+blogs_freq_tab_4 <- data.frame(blogs_words_4, blogs_freq_4); names(blogs_freq_tab_4) <- c(x_name, y_name)
+
+
+# Build barplots of frequent n-grams in blogs corpus sample
+
+## Blogs 1-grams
+blogs_freq_tab_1_sub <- as.data.frame(head(blogs_freq_tab_1, n = 20)); blogs_freq_tab_1_sub$order <- factor(blogs_freq_tab_1_sub$gram, as.character(blogs_freq_tab_1_sub$gram))
+
+blogs_freq_tab_1_sub.plot <- ggplot(blogs_freq_tab_1_sub, aes(x = blogs_freq_tab_1_sub$order, y = blogs_freq_tab_1_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 1-grams in Blogs Corpus") +
+    geom_bar(colour="green", fill="blue", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+## Blogs 2-grams
+blogs_freq_tab_2_sub <- as.data.frame(head(blogs_freq_tab_2, n = 20)); blogs_freq_tab_2_sub$order <- factor(blogs_freq_tab_2_sub$gram, as.character(blogs_freq_tab_2_sub$gram))
+
+blogs_freq_tab_2_sub.plot <- ggplot(blogs_freq_tab_2_sub, aes(x = blogs_freq_tab_2_sub$order, y = blogs_freq_tab_2_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 2-grams in blogs Corpus") +
+    geom_bar(colour="pink", fill="purple", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+## Blogs 3-grams
+
+blogs_freq_tab_3_sub <- as.data.frame(head(blogs_freq_tab_3, n = 20)); blogs_freq_tab_3_sub$order <- factor(blogs_freq_tab_3_sub$gram, as.character(blogs_freq_tab_3_sub$gram))
+
+blogs_freq_tab_3_sub.plot <- ggplot(blogs_freq_tab_3_sub, aes(x = blogs_freq_tab_3_sub$order, y = blogs_freq_tab_3_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 3-grams in Twitter Corpus") +
+    geom_bar(colour="green", fill="yellow", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+## Blogs 4-grams
+
+blogs_freq_tab_4_sub <- as.data.frame(head(blogs_freq_tab_4, n = 20)); blogs_freq_tab_4_sub$order <- factor(blogs_freq_tab_4_sub$gram, as.character(blogs_freq_tab_4_sub$gram))
+
+blogs_freq_tab_4_sub.plot <- ggplot(blogs_freq_tab_4_sub, aes(x = blogs_freq_tab_4_sub$order, y = blogs_freq_tab_4_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 4-grams in Blogs Corpus") +
+    geom_bar(colour="orange", fill="turquoise", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+
+## Combine all barplots
+par(mfrow=c(2,2))
+plot(blogs_freq_tab_1_sub.plot); plot(blogs_freq_tab_2_sub.plot); plot(blogs_freq_tab_3_sub.plot); plot(blogs_freq_tab_4_sub.plot)
+
+
+## Clean up
+rm(blogs_corp); rm(x_name); rm(y_name)
+rm(blogs_tok); rm(blogs_tok_2); rm(blogs_tok_3); rm(blogs_tok_4)
+rm(blogs_words); rm(blogs_words_2); rm(blogs_words_3); rm(blogs_words_4)
+rm(blogs_freq_1); rm(blogs_freq_2); rm(blogs_freq_3); rm(blogs_freq_4)
+  
+```
+
+
+## Next steps...
