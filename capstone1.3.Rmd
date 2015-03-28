@@ -205,9 +205,55 @@ tweets_freq_tab_3 <- data.frame(tweets_words_3, tweets_freq_3); names(tweets_fre
 tweets_freq_4 <- as.numeric(make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE))
 tweets_freq_tab_4 <- data.frame(tweets_words_4, tweets_freq_4); names(tweets_freq_tab_4) <- c(x_name, y_name)
 
-# Histograms of n-grams 
 
 
+# Barplots of frequent n-grams in several corpora
+
+## Blogs 1-grams
+blogs_freq_tab_1_sub <- as.data.frame(head(blogs_freq_tab_1, n = 20)); blogs_freq_tab_1_sub$order <- factor(blogs_freq_tab_1_sub$gram, as.character(blogs_freq_tab_1_sub$gram))
+
+blogs_freq_tab_1_sub.plot <- ggplot(blogs_freq_tab_1_sub, aes(x = blogs_freq_tab_1_sub$order, y = blogs_freq_tab_1_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 1-grams in Blogs Corpus") +
+    geom_bar(colour="green", fill="blue", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(blogs_freq_tab_1_sub.plot)
+
+## News 2-grams
+news_freq_tab_2_sub <- as.data.frame(head(news_freq_tab_2, n = 20)); news_freq_tab_2_sub$order <- factor(news_freq_tab_2_sub$gram, as.character(news_freq_tab_2_sub$gram))
+
+news_freq_tab_2_sub.plot <- ggplot(news_freq_tab_2_sub, aes(x = news_freq_tab_2_sub$order, y = news_freq_tab_2_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 2-grams in News Corpus") +
+    geom_bar(colour="pink", fill="purple", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(news_freq_tab_2_sub.plot)
+
+## Tweets 3-grams
+
+tweets_freq_tab_3_sub <- as.data.frame(head(tweets_freq_tab_3, n = 20)); tweets_freq_tab_3_sub$order <- factor(tweets_freq_tab_3_sub$gram, as.character(tweets_freq_tab_3_sub$gram))
+
+tweets_freq_tab_3_sub.plot <- ggplot(tweets_freq_tab_3_sub, aes(x = tweets_freq_tab_3_sub$order, y = tweets_freq_tab_3_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 3-grams in Twitter Corpus") +
+    geom_bar(colour="green", fill="yellow", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(tweets_freq_tab_3_sub.plot)
+
+## Blogs 4-grams
+
+blogs_freq_tab_4_sub <- as.data.frame(head(blogs_freq_tab_4, n = 20)); blogs_freq_tab_4_sub$order <- factor(blogs_freq_tab_4_sub$gram, as.character(blogs_freq_tab_4_sub$gram))
+
+blogs_freq_tab_4_sub.plot <- ggplot(blogs_freq_tab_4_sub, aes(x = blogs_freq_tab_4_sub$order, y = blogs_freq_tab_4_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 4-grams in Blogs Corpus") +
+    geom_bar(colour="orange", fill="turquoise", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(blogs_freq_tab_4_sub.plot)
 
 # Clean up
 rm(x_name); rm(y_name)
@@ -223,7 +269,17 @@ rm(tweets_tok); rm(tweets_tok_2); rm(tweets_tok_3); rm(tweets_tok_4)
 rm(tweets_words); rm(tweets_words_2); rm(tweets_words_3); rm(tweets_words_4)
 rm(tweets_freq_1); rm(tweets_freq_2); rm(tweets_freq_3); rm(tweets_freq_4)
 
+rm(blogs_freq_tab_1_sub); rm(blogs_freq_tab_1_sub.plot)
+rm(news_freq_tab_2_sub); rm(news_freq_tab_2_sub.plot)
+rm(tweets_freq_tab_3_sub); rm(tweets_freq_tab_3_sub.plot)
+rm(blogs_freq_tab_4_sub); rm(blogs_freq_tab_4_sub.plot)
 ```
                                                                                                                                                                                                   
 
 ## Modeling 
+
+For the milestone:
+
+- mention thorny issue of contractions; try to come up with a principled way of tackling the problem.
+- address goals for the eventual app and algorithm
+- briefly summarize your plans for creating the prediction algorithm and Shiny app
