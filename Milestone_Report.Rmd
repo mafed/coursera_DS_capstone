@@ -1,0 +1,134 @@
+---
+title: "Milestone Report"
+author: "Christopher Stewart"
+date: "March 28, 2015"
+output: html_document
+---
+
+# Introduction
+
+This document reports on progress towards a text prediction algorithm and Shiny application undertaken in the course of the Capstone project marking the end of the 9-course [Data Science Specialization offered through Coursera] (https://www.coursera.org/specialization/jhudatascience/1) and the [John Hopkins Department of Biostatistics] (http://www.jhsph.edu/departments/biostatistics/). The project is offered in cooperation with [Swiftkey] (http://swiftkey.com/en/), a company building smart prediction technology for easier mobile typing. This particular presentation is available as an [R Studio Presenter presentation] (INSERT URL HERE).
+
+## Downloading and Inspecting the Data
+
+The data is provided for us, so the first step is to download it, then get an idea of the size of the files' sizes. We know _a priori_ that the data set consists of 3 large text corpora taken from blogs, news and Twitter. 
+
+```{r}
+suppressPackageStartupMessages(require("downloader")); suppressPackageStartupMessages(require("R.utils"))
+
+# Download, unzip data and setwd()
+url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download(url, dest = "data.zip", mode = "wb")
+unzip("data.zip", exdir = "./")
+
+# Set working directory
+setwd(paste(getwd(),"/final/en_US",sep=""))
+list.files()
+
+# Get an idea of corpora sizes in lines
+as.numeric(countLines("en_US.blogs.txt"))
+as.numeric(countLines("en_US.news.txt"))
+as.numeric(countLines("en_US.twitter.txt"))
+
+# Read in data
+blogs <- readLines("en_US.blogs.txt"); news <- readLines("en_US.news.txt"); tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
+
+# Get an idea of approximate word counts
+blogs_word_count <- length(strsplit(blogs, " "))
+print(blogs_word_count)
+news_word_count <- length(strsplit(news, " "))
+print(news_word_count)
+tweets_word_count <- length(strsplit(tweets, " "))
+print(tweets_word_count)
+
+# Clean up
+rm(url); rm(blogs_word_count); rm(news_word_count); rm(tweets_word_count)
+```
+
+
+### Sampling 
+
+Seeing the size of the data set, we elect to take a random sample of a size sufficient to guarantee representativeness. 
+
+```{r echo = FALSE}
+suppressPackageStartupMessages(require("stats"))
+
+# Compute sample size needed
+sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05)$n, digits = 0)
+
+# Make samples
+blogs_samp <- sample(blogs, sample_size)
+length(blogs_samp)
+news_samp <- sample(news, sample_size)
+length(news_samp)
+tweets_samp <- sample(tweets, sample_size)
+length(tweets_samp)
+
+# Write samples out:: do I need to do this? XXX
+write.table(blogs_samp, file = "blogs_sample.txt")
+write.table(news_samp, file = "news_sample.txt")
+write.table(tweets_samp, file = "tweets_sample.txt")
+
+# Clean up
+rm(sample_size); rm(blogs); rm(news); rm(tweets)
+
+```
+
+
+## Major Features of the Data 
+
+With a more manageable sampled subset of the data, we briefly look at some of the more / challenging (for our project) features of the data. In order to get an idea of such features, we look at the last 10 lines in the sample drawn from the blogs sample, the first 10 lines from news sample and the last 10 lines of the Twitter sample.
+
+```{r}
+tail(blogs_samp, n = 10)
+```
+
+### WHAT DO WE SEE THAT IS INTERESTING FOR THIS PROJECT?
+
+head(news_samp, n = 10)
+tail(tweets_samp, n = 10)
+
+```
+
+
+
+
+
+```{r}
+require("stringr")
+
+# Data cleaning
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+## Blogs
+blogs_samp_1 <- tolower(blogs_samp)
+blogs_samp_2 <- str_replace_all(blogs_samp_1, "[^[:alnum:]]", " "); blogs_samp_2 <- iconv(blogs_samp_2, from="UTF-8", to="ascii", sub=""); blogs_samp_2 <- iconv(blogs_samp_2, to="ASCII//TRANSLIT")
+blogs_samp_3 <- str_replace_all(blogs_samp_2, "[[:digit:]]+", " ")
+blogs_samp_4 <- str_replace_all(blogs_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
+blogs_samp_5 <- str_replace_all(blogs_samp_4, "  ", replacement = " ")
+write.table(blogs_samp_5, file = "./samples/blogs_sample.txt")
+
+## News
+news_samp_1 <- tolower(news_samp)
+news_samp_2 <- str_replace_all(news_samp_1, "[^[:alnum:]]", " "); news_samp_2 <- iconv(news_samp_2, from="UTF-8", to="ascii", sub=""); news_samp_2 <- iconv(blogs_samp_2, to="ASCII//TRANSLIT")
+news_samp_3 <- str_replace_all(news_samp_2, "[[:digit:]]+", " ")
+news_samp_4 <- str_replace_all(news_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
+news_samp_5 <- str_replace_all(news_samp_4, "  ", replacement = " ")
+write.table(news_samp_5, file = "./samples/news_sample.txt")
+
+## Tweets
+tweets_samp_1 <- tolower(tweets_samp)
+tweets_samp_2 <- str_replace_all(tweets_samp_1, "[^[:alnum:]]", " "); tweets_samp_2 <- iconv(tweets_samp_2, from="UTF-8", to="ascii", sub=""); tweets_samp_2 <- iconv(tweets_samp_2, to="ASCII//TRANSLIT")
+tweets_samp_3 <- str_replace_all(tweets_samp_2, "[[:digit:]]+", " ")
+tweets_samp_4 <- str_replace_all(tweets_samp_3, paste(profanity_list, collapse = "|"), replacement = "")
+tweets_samp_5 <- str_replace_all(tweets_samp_4, "  ", replacement = " ")
+write.table(tweets_samp_5, file = "./samples/tweets_sample.txt")
+
+## Clean up
+rm(profanity_list)
+rm(blogs_samp); rm(blogs_samp_1); rm(blogs_samp_2); rm(blogs_samp_3); rm(blogs_samp_4); rm(blogs_samp_5)
+rm(news_samp); rm(news_samp_1); rm(news_samp_2); rm(news_samp_3); rm(news_samp_4); rm(news_samp_5)
+rm(tweets_samp); rm(tweets_samp_1); rm(tweets_samp_2); rm(tweets_samp_3); rm(tweets_samp_4); rm(tweets_samp_5)
+
+```
+

@@ -78,8 +78,6 @@ For corpus creation, we first clean up our corpora by removing upper-case letter
 ```{r}
 require("stringr")
 
-dir.create(path = "./samples/")
-
 # Data cleaning
 profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
 
