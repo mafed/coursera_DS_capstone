@@ -7,11 +7,13 @@ output: html_document
 
 # Introduction
 
-This document reports on progress towards a text prediction algorithm and Shiny application undertaken in the course of the Capstone project marking the end of the 9-course [Data Science Specialization offered through Coursera] (https://www.coursera.org/specialization/jhudatascience/1) and the [John Hopkins Department of Biostatistics] (http://www.jhsph.edu/departments/biostatistics/). The project is offered in cooperation with [Swiftkey] (http://swiftkey.com/en/), a company building smart prediction technology for easier mobile typing. This particular presentation is available as an [R Studio Presenter presentation] (INSERT URL HERE).
+This document reports on progress towards a text prediction algorithm and Shiny application undertaken in the Capstone project marking the end of the 9-course [Data Science Specialization offered through Coursera](https://www.coursera.org/specialization/jhudatascience/1) and the [John Hopkins Department of Biostatistics](http://www.jhsph.edu/departments/biostatistics/). The project is offered in cooperation with [Swiftkey](http://swiftkey.com/en/), a company building smart prediction technology for easier mobile typing.  
+
+This particular presentation is available as an [R Studio Presenter presentation](http://rpubs.com/cmstewart/milestone_report_final).
 
 ## Downloading and Inspecting the Data
 
-The data is provided for us, so the first step is to download it, then get an idea of the size of the files' sizes. We know _a priori_ that the data set consists of 3 large text corpora taken from blogs, news and Twitter. 
+The data is provided for us, so the first step is to download it, then get an idea of the size of the files' sizes. We know _a priori_ that the data set consists of 3 large text corpora taken from blogs, news and Twitter. *We report on the number of words in a subsample of the data after tokenization (_see below_).*
 
 ```{r}
 suppressPackageStartupMessages(require("downloader")); suppressPackageStartupMessages(require("R.utils"))
@@ -25,7 +27,7 @@ unzip("data.zip", exdir = "./")
 setwd(paste(getwd(),"/final/en_US",sep=""))
 list.files()
 
-# Get an idea of corpora sizes in lines
+# Get an idea of corpora sizes
 as.numeric(countLines("en_US.blogs.txt"))
 as.numeric(countLines("en_US.news.txt"))
 as.numeric(countLines("en_US.twitter.txt"))
@@ -33,22 +35,14 @@ as.numeric(countLines("en_US.twitter.txt"))
 # Read in data
 blogs <- readLines("en_US.blogs.txt"); news <- readLines("en_US.news.txt"); tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
 
-# Get an idea of approximate word counts
-blogs_word_count <- length(strsplit(blogs, " "))
-print(blogs_word_count)
-news_word_count <- length(strsplit(news, " "))
-print(news_word_count)
-tweets_word_count <- length(strsplit(tweets, " "))
-print(tweets_word_count)
-
 # Clean up
-rm(url); rm(blogs_word_count); rm(news_word_count); rm(tweets_word_count)
+rm(url)
 ```
 
 
-## Sampling 
+# Sampling 
 
-Seeing the size of the data set, we elect to take a random sample of a size sufficient to guarantee representativeness. 
+Seeing the size of the data set, we elect to take a random sample of a size sufficient to guarantee representativeness. The following code chunk performs this sampling, reporting only the size of the sample drawn from the three corpora.
 
 ```{r echo = FALSE}
 suppressPackageStartupMessages(require("stats"))
@@ -70,16 +64,16 @@ rm(sample_size); rm(blogs); rm(news); rm(tweets); rm(news_samp); rm(tweets_samp)
 ```
 
 
-## Major Features of the Data 
+# Major Features of the Data 
 
-With a more manageable sampled subset of the data, we briefly look at some of the more / challenging (for our project) features of the data. In order to get an idea of such features, we  look at the last 5 lines in the sample drawn from the blogs sample.
+With a more manageable sampled subset of the data, we briefly look at some of the more interesting / challenging features of the data for text prediction. In order to get an idea of such features, we  look at the last 5 lines in the sample drawn from the blogs sample.
 
-```{r}
+```{r looking at features of the data}
 tail(blogs_samp, n = 5)
 ```
 
 
-For the purposes of text prediction, these 10 lines reveal the presence of several types of characters that should be eliminated as they shouldn't be predicted. These include punctuation, quotation marks and digits. Furthermore, this and the three other samples are likely to contain non-English characters, emoticons, curse words and other things we wouldn't like to predict. As such, we clean the samples. The current report illustrates this cleaning, and subsequent analyses, with the **blogs** corpus sample. The following block of code does so, displaying the first 5 lines of the _cleaned_ blog sample. 
+For the purposes of text prediction, these lines reveal several types of characters that should be eliminated as they shouldn't be predicted, including punctuation, quotation marks and digits. Furthermore, this and the three other samples are likely to contain non-English characters, emoticons, curse words and other things we wouldn't like to predict. As such, we clean the samples.  The following code chunk performs this data cleaning with the **blogs** corpus sample _only_, displaying the first 5 lines of the _cleaned_ blog sample. 
 
 
 ```{r echo = FALSE}
@@ -101,12 +95,14 @@ rm(blogs_samp); rm(blogs_samp_1); rm(blogs_samp_2); rm(blogs_samp_3); rm(blogs_s
 
 ```
 
-## Tokenization, n-gram construction and initial visual data exploration
 
-The next step is to tokenize and build n-grams, which we will then use to predict the posterior probability of a word given the previous context. We have chosen to use R's [stylo] (https://sites.google.com/site/computationalstylistics/stylo) package to tokenize and produce n-grams. The following code does so for the _blogs_ sample, then displays the 20 most common 1-, 2-, 3- and 4-grams in that sample.
+# Tokenization, n-gram construction and initial visual data exploration
+
+The next step is to tokenize and build n-grams, which we will then use to predict the posterior probability of a word given the previous context. We have chosen to use R's [stylo](https://sites.google.com/site/computationalstylistics/stylo) package to tokenize and produce n-grams. The following code does so for the _blogs_ sample, reporting the **total number of words** in this sample.The code chunk then displays the 20 most common 1-, 2-, 3- and 4-grams in that sample.
+
 
 ```{r echo = FALSE}
-suppressPackageStartupMessages(require("stylo")); suppressPackageStartupMessages(require("ggplot2"))
+suppressPackageStartupMessages(require("stylo")); suppressPackageStartupMessages(require("ggplot2")); suppressPackageStartupMessages(require("gridExtra"))
 
 # Build corpus, tokenize and produce n-grams
 blogs_corp <- load.corpus(files = "blogs_sample.txt")
@@ -116,6 +112,9 @@ blogs_tok_2 <- make.ngrams(blogs_tok, ngram.size = 2); blogs_tok_3 <- make.ngram
 
 # Build word lists for n-grams
 blogs_words = names(sort(table(unlist(blogs_tok)), decreasing = TRUE)); blogs_words_2 = names(sort(table(unlist(blogs_tok_2)), decreasing = TRUE)); blogs_words_3 = names(sort(table(unlist(blogs_tok_3)), decreasing = TRUE)); blogs_words_4 = names(sort(table(unlist(blogs_tok_4)), decreasing = TRUE)) 
+
+print(length(blogs_words))
+      
 
 # Build frequency counts and tables
 x_name <- "grams"; y_name <- "frequency"
@@ -175,8 +174,7 @@ blogs_freq_tab_4_sub.plot <- ggplot(blogs_freq_tab_4_sub, aes(x = blogs_freq_tab
 
 
 ## Combine all barplots
-par(mfrow=c(2,2))
-plot(blogs_freq_tab_1_sub.plot); plot(blogs_freq_tab_2_sub.plot); plot(blogs_freq_tab_3_sub.plot); plot(blogs_freq_tab_4_sub.plot)
+newplot <- grid.arrange(blogs_freq_tab_1_sub.plot, blogs_freq_tab_2_sub.plot, blogs_freq_tab_3_sub.plot, blogs_freq_tab_4_sub.plot, ncol = 2)
 
 
 ## Clean up
@@ -188,4 +186,19 @@ rm(blogs_freq_1); rm(blogs_freq_2); rm(blogs_freq_3); rm(blogs_freq_4)
 ```
 
 
-## Next steps...
+# Next steps
+
+## Remaining Issues
+
+This report brings up a few potential thorny issues that have yet to be addressed. Chief among these is that of contractions. As the barplots reveal, contractions are currently in the data as two words (e.g "don't" is "don" + "t"). Experimentation with the text prediction models should show if this is the correct choice or not.
+
+## Text Prediction Algorithm and Shiny Data Application 
+
+Now that we have a sorted list of n-grams, the next steps are to write a function that accepts a string of words and attempts to predict the next word. We anticipate doing so by searching our sorted lists for the largest matching string, then taking the word that most often occurs next. For example, if the user types "I am going", the function finds this trigram in the data and returns the word from the 4-gram table that most often completes that sequence in the observed data. If "I am going to" occurs, for example, 76 times and "I am going for" occurs 52 times, the function would return "to" as the predicted word.
+
+If the string *does not* occur in the data, we plan to revert to a smaller n-gram. Such a "backoff" mechanism would complete a progressively smaller sequence so that if the user enters "Colorless clouds float" and there are no occurrences in the data, the function looks for "clouds float" and eventually even "float", returning the most probable next word in each case. 
+
+Once the function is written, we will begin training a model using increasingly higher sample sizes, until computing capacity is reached. At this point, we will explore avenues for making the model more efficient via more efficient coding, better data structures, etc. We then pla to build these structures into a Shiny application, remaining as faithful as possible to the structure and experience described herein.
+
+
+# Thank you very much for your time. We would greatly appreciate any feedback you might care to provide!
