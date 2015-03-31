@@ -1,0 +1,349 @@
+---
+title: "Capstone Project"
+author: "Christopher Stewart"
+date: "March 25, 2015"
+output: html_document
+---
+
+## Introduction 
+This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use large text files to build a text prediction algorithmthat is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation](insert URL here).
+
+I have elected to complete the project in R as per the parameters of the assignment, but also in Python to get hands-on experience with the Python's Natural Language Toolkit ([NLTK](http://www.nltk.org/)). A report on the Python version of the project is available [here](insert URL here).
+
+
+## Data preparation and exploration
+
+### Data Acquisition
+
+Initially, we download the data and unzip the data files, switching working directories to that of the English language text files. We then print out the contents of the current directory to ensure that everything is in order.
+
+```{r data acquisition}
+suppressPackageStartupMessages(require("downloader")); suppressPackageStartupMessages(require("R.utils"))
+
+# Download, unzip data and setwd()
+url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download(url, dest = "data.zip", mode = "wb")
+unzip("data.zip", exdir = "./")
+
+# Set working directory
+setwd(paste(getwd(),"/final/en_US",sep=""))
+list.files()
+
+# Clean up
+rm(url)
+```
+
+
+### Training, Testing and Corpus Building
+
+Next we read in the data and divide the "blogs", "news" and "twitter" data into three parts:
+
+1. Our _test_ set will be used as a final metric of the accuracy of the text prediction algorithm. For it, we set aside 10% of each data file.
+
+2. Our
+
+From the remaining 90%, 10% is set aside as _training_ data, to be used to improve the model derived from the bulk of the data. 
+
+3. The remaining data will be referred to as the _corpus_ data. This data will be used to develop the initial model. 
+
+
+```{r data cleaning}
+suppressPackageStartupMessages(require("stats"))
+dir.create(path = "./test/")
+
+# Read in data
+blogs <- readLines("en_US.blogs.txt")
+news <- readLines("en_US.news.txt")
+tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
+
+# Subsetting
+set.seed(1)
+blogs.test <- blogs[sample(1:length(blogs), 0.10*length(blogs), replace = FALSE)]
+blogs.rest <- blogs[!blogs %in% blogs.test]
+write.table(blogs.test, file = "./test/blogs.test.txt")
+
+news.test <- news[sample(1:length(news), 0.10*length(news), replace = FALSE)]
+news.rest <- news[!news %in% news.test]
+write.table(news.test, file = "./test/news.test.txt")
+
+tweets.test <- tweets[sample(1:length(tweets), 0.10*length(tweets), replace = FALSE)]
+tweets.rest <- tweets[!tweets %in% tweets.test]
+write.table(tweets.test, file = "./test/tweets.test.txt")
+
+# Clean up
+rm(blogs); rm(news); rm(tweets)
+rm(blogs.test); rm(news.test); rm(tweets.test)
+
+```
+
+
+### Data cleaning
+
+A quick look at the first few lines of each corpus reveal the presence of elements that we *don't want* to predict, including emoticons, numbers, profanity, punctuation, etc. We clean our corpora so that these do not go into the models. 
+
+```{r}
+suppressPackageStartupMessages(require("stringr"))
+dir.create(path = "./rest/")
+
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+## blogs.rest
+blogs.rest.1 <- tolower(blogs.rest)
+blogs.rest.2 <- str_replace_all(blogs.rest.1, "[^[:alnum:]]", " "); blogs.rest.2 <- iconv(blogs.rest.2, from="UTF-8", to="ascii", sub=""); blogs.rest.2 <- iconv(blogs.rest.2, to="ASCII//TRANSLIT")
+blogs.rest.3 <- str_replace_all(blogs.rest.2, "[[:digit:]]+", " ")
+blogs.rest.4 <- str_replace_all(blogs.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+blogs.rest.5 <- str_replace_all(blogs.rest.4, "  ", replacement = " ")
+write.table(blogs.rest.5, file = "./rest/blogs.rest_cleaned.txt")
+
+### Clean up
+rm(blogs.rest); rm(blogs.rest.1); rm(blogs.rest.2); rm(blogs.rest.3); rm(blogs.rest.4); rm(blogs.rest.5)
+
+## news.rest
+news.rest.1 <- tolower(news.rest)
+news.rest.2 <- str_replace_all(news.rest.1, "[^[:alnum:]]", " "); news.rest.2 <- iconv(news.rest.2, from="UTF-8", to="ascii", sub=""); news.rest.2 <- iconv(news.rest.2, to="ASCII//TRANSLIT")
+news.rest.3 <- str_replace_all(news.rest.2, "[[:digit:]]+", " ")
+news.rest.4 <- str_replace_all(news.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+news.rest.5 <- str_replace_all(news.rest.4, "  ", replacement = " ")
+write.table(news.rest.5, file = "./rest/news.rest_cleaned.txt")
+
+### Clean up
+rm(news.rest); rm(news.rest.1); rm(news.rest.2); rm(news.rest.3); rm(news.rest.4); rm(news.rest.5)  
+
+## tweets.rest
+tweets.rest.1 <- tolower(tweets.rest)
+tweets.rest.2 <- str_replace_all(tweets.rest.1, "[^[:alnum:]]", " "); tweets.rest.2 <- iconv(tweets.rest.2, from="UTF-8", to="ascii", sub=""); tweets.rest.2 <- iconv(tweets.rest.2, to="ASCII//TRANSLIT")
+tweets.rest.3 <- str_replace_all(tweets.rest.2, "[[:digit:]]+", " ")
+tweets.rest.4 <- str_replace_all(tweets.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+tweets.rest.5 <- str_replace_all(tweets.rest.4, "  ", replacement = " ")
+write.table(tweets.rest.5, file = "./rest/tweets.rest_cleaned.txt")
+
+## Clean up
+rm(profanity_list)
+rm(tweets.rest); rm(tweets.rest.1); rm(tweets.rest.2); rm(tweets.rest.3); rm(tweets.rest.4); rm(tweets.rest.5)  
+
+```
+
+
+## Tokenization and n-gram construction
+
+In the next step of data processing, we use R's [stylo](https://sites.google.com/site/computationalstylistics/stylo) package to tokenize the data. Tokenization allows us to check for words that are extrememly infrequent, which we don't want to predict. We look first at the blogs data.
+
+```{r}
+suppressPackageStartupMessages(require("stylo"))
+
+# Load blogs into stylo corpus object and tokenize
+blogs_corp <- load.corpus.and.parse(files = "blogs.rest_cleaned.txt", corpus.dir = "./rest", markup.type = "plain",
+                                    language = "English.all", splitting.rule = NULL)
+
+# Get ordered word list from blogs corpus object, then make frequency table 
+blogs_words = names(sort(table(unlist(blogs_corp)), decreasing = TRUE))
+
+x_name <- "grams"; y_name <- "frequency"
+blogs_freq_1 <- as.numeric(make.table.of.frequencies(blogs_corp, blogs_words, relative = FALSE))
+blogs_freq_tab_1 <- data.frame(blogs_words, blogs_freq_1); names(blogs_freq_tab_1) <- c(x_name, y_name)
+
+# Look at frequency of unigrams w/ n = 1
+blogs_1grams.to_del <- subset(blogs_freq_tab_1, frequency <= 1)
+cat('In this subset of 90% of the blogs text file, about', round((length(blogs_freq_tab_1.not_freq$grams) / length(blogs_freq_tab_1$grams) * 100), digits = 0), '% of the tokens occur only once. Here are some examples:')
+
+print(blogs_freq_tab_1.not_freq[sample(nrow(blogs_freq_tab_1.not_freq), 5), ])
+
+# Clean up (COME BACK TO THIS!!!)
+rm(blogs_words); rm(blogs_freq_1); rm(blogs_freq_tab_1.not_freq)
+
+```
+
+Seeing that a substantial portion of the tokens are very infrequent and having no reason to suspect that the news and Twitter datasets should be any different, we load in the other two files and make a subset of words to be eliminated from the "training" and "corpora" text files.
+
+
+```{r}
+dir.create(path = "./ngrams/")
+
+# Load in remaining data, tokenize, make word lists and frequency tables 
+news_corp <- load.corpus.and.parse(files = "news.rest_cleaned.txt", corpus.dir = "./rest", markup.type = "plain",
+                                    language = "English.all", splitting.rule = NULL)
+tweets_corp <- load.corpus.and.parse(files = "tweets.rest_cleaned.txt", corpus.dir = "./rest", markup.type = "plain",
+                                    language = "English.all", splitting.rule = NULL)
+
+news_words = names(sort(table(unlist(news_corp)), decreasing = TRUE))
+news_freq_1 <- as.numeric(make.table.of.frequencies(news_corp, news_words, relative = FALSE))
+news_freq_tab_1 <- data.frame(news_words, news_freq_1); names(news_freq_tab_1) <- c(x_name, y_name)
+
+tweets_words = names(sort(table(unlist(tweets_corp)), decreasing = TRUE))
+tweets_freq_1 <- as.numeric(make.table.of.frequencies(tweets_corp, tweets_words, relative = FALSE))
+tweets_freq_tab_1 <- data.frame(tweets_words, tweets_freq_1); names(tweets_freq_tab_1) <- c(x_name, y_name)
+
+# Subsetting
+news_1grams.to_del <- subset(news_freq_tab_1, frequency <= 1)
+tweets_1grams.to_del <- subset(tweets_freq_tab_1, frequency <= 1)
+
+# Write to new files
+write.table(blogs_freq_tab_1.keep, file = "./ngrams/blogs_freq_tab_1.keep.txt")
+write.table(news_freq_tab_1.keep, file = "./ngrams/news_freq_tab_1.keep.txt")
+write.table(tweets_freq_tab_1.keep, file = "./ngrams/tweets_freq_tab_1.keep.txt")
+
+# 
+
+# Cleaning up
+rm(blogs_freq_tab_1); rm(x_name); rm(y_name)
+rm(news_corp); rm(news_words); rm(news_freq_1); rm(news_freq_tab_1)
+rm(tweets_corp); rm(tweets_words); rm(tweets_freq_1); rm(tweets_freq_tab_1)
+
+```
+
+We now make 2-, 3- and 4-grams from the remaining data.
+
+```{r}
+# Make 2-, 3- and 4-grams
+blogs_tok_2 <- make.ngrams(blogs_tok, ngram.size = 2); blogs_tok_3 <- make.ngrams(blogs_tok, ngram.size = 3); blogs_tok_4 <- make.ngrams(blogs_tok, ngram.size = 4)
+
+news_tok_2 <- make.ngrams(news_tok, ngram.size = 2); news_tok_3 <- make.ngrams(news_tok, ngram.size = 3); news_tok_4 <- make.ngrams(news_tok, ngram.size = 4)
+
+tweets_tok_2 <- make.ngrams(tweets_tok, ngram.size = 2); tweets_tok_3 <- make.ngrams(tweets_tok, ngram.size = 3); tweets_tok_4 <- make.ngrams(tweets_tok, ngram.size = 4)
+
+# Clean up
+rm(blogs_corp); rm(news_corp); rm(tweets_corp)
+
+```
+
+
+Next, we build word lists and frequency tables. These will allow us to get an initial idea of highly frequent sequences against which we can subsequently test our text prediction models.
+
+
+```{r}
+
+# Make word lists and frequency tables
+
+## Blogs sorted word lists
+blogs_words = names(sort(table(unlist(blogs_tok)), decreasing = TRUE)); blogs_words_2 = names(sort(table(unlist(blogs_tok_2)), decreasing = TRUE)); blogs_words_3 = names(sort(table(unlist(blogs_tok_3)), decreasing = TRUE)); blogs_words_4 = names(sort(table(unlist(blogs_tok_4)), decreasing = TRUE)) 
+
+## News sorted word lists
+news_words = names(sort(table(unlist(news_tok)), decreasing = TRUE)); news_words_2 = names(sort(table(unlist(news_tok_2)), decreasing = TRUE)); news_words_3 = names(sort(table(unlist(news_tok_3)), decreasing = TRUE)); news_words_4 = names(sort(table(unlist(news_tok_4)), decreasing = TRUE))
+
+## Tweets sorted word lists
+tweets_words = names(sort(table(unlist(tweets_tok)), decreasing = TRUE)); tweets_words_2 = names(sort(table(unlist(tweets_tok_2)), decreasing = TRUE)); tweets_words_3 = names(sort(table(unlist(tweets_tok_3)), decreasing = TRUE)); tweets_words_4 = names(sort(table(unlist(tweets_tok_4)), decreasing = TRUE))
+
+
+## Blogs frequency counts and tables
+x_name <- "grams"; y_name <- "frequency"
+
+blogs_freq_1 <- as.numeric(make.table.of.frequencies(blogs_tok, blogs_words, relative = FALSE))
+blogs_freq_tab_1 <- data.frame(blogs_words, blogs_freq_1); names(blogs_freq_tab_1) <- c(x_name, y_name)
+
+blogs_freq_2 <- as.numeric(make.table.of.frequencies(blogs_tok_2, blogs_words_2, relative = FALSE))
+blogs_freq_tab_2 <- data.frame(blogs_words_2, blogs_freq_2); names(blogs_freq_tab_2) <- c(x_name, y_name)
+
+blogs_freq_3 <- as.numeric(make.table.of.frequencies(blogs_tok_3, blogs_words_3, relative = FALSE))
+blogs_freq_tab_3 <- data.frame(blogs_words_3, blogs_freq_3); names(blogs_freq_tab_3) <- c(x_name, y_name)
+
+blogs_freq_4 <- as.numeric(make.table.of.frequencies(blogs_tok_4, blogs_words_4, relative = FALSE))
+blogs_freq_tab_4 <- data.frame(blogs_words_4, blogs_freq_4); names(blogs_freq_tab_4) <- c(x_name, y_name)
+
+## News frequency counts
+news_freq_1 <- as.numeric(make.table.of.frequencies(news_tok, news_words, relative = FALSE))
+news_freq_tab_1 <- data.frame(news_words, news_freq_1); names(news_freq_tab_1) <- c(x_name, y_name)
+
+news_freq_2 <- as.numeric(make.table.of.frequencies(news_tok_2, news_words_2, relative = FALSE))
+news_freq_tab_2 <- data.frame(news_words_2, news_freq_2); names(news_freq_tab_2) <- c(x_name, y_name)
+
+news_freq_3 <- as.numeric(make.table.of.frequencies(news_tok_3, news_words_3, relative = FALSE))
+news_freq_tab_3 <- data.frame(news_words_3, news_freq_3); names(news_freq_tab_3) <- c(x_name, y_name)
+
+news_freq_4 <- as.numeric(make.table.of.frequencies(news_tok_4, news_words_4, relative = FALSE))
+news_freq_tab_4 <- data.frame(news_words_4, news_freq_4); names(news_freq_tab_4) <- c(x_name, y_name)
+
+## Tweets frequency counts
+tweets_freq_1 <- as.numeric(make.table.of.frequencies(tweets_tok, tweets_words, relative = FALSE))
+tweets_freq_tab_1 <- data.frame(tweets_words, tweets_freq_1); names(tweets_freq_tab_1) <- c(x_name, y_name)
+
+tweets_freq_2 <- as.numeric(make.table.of.frequencies(tweets_tok_2, tweets_words_2, relative = FALSE))
+tweets_freq_tab_2 <- data.frame(tweets_words_2, tweets_freq_2); names(tweets_freq_tab_2) <- c(x_name, y_name)
+
+tweets_freq_3 <- as.numeric(make.table.of.frequencies(tweets_tok_3, tweets_words_3, relative = FALSE))
+tweets_freq_tab_3 <- data.frame(tweets_words_3, tweets_freq_3); names(tweets_freq_tab_3) <- c(x_name, y_name)
+
+tweets_freq_4 <- as.numeric(make.table.of.frequencies(tweets_tok_4, tweets_words_4, relative = FALSE))
+tweets_freq_tab_4 <- data.frame(tweets_words_4, tweets_freq_4); names(tweets_freq_tab_4) <- c(x_name, y_name)
+```
+
+Finally, we build barplots of some of the most frequent n-grams.
+
+```{r}
+require(ggplot2)
+
+# Barplots of frequent n-grams in several corpora
+
+## Blogs 1-grams
+blogs_freq_tab_1_sub <- as.data.frame(head(blogs_freq_tab_1, n = 20)); blogs_freq_tab_1_sub$order <- factor(blogs_freq_tab_1_sub$gram, as.character(blogs_freq_tab_1_sub$gram))
+
+blogs_freq_tab_1_sub.plot <- ggplot(blogs_freq_tab_1_sub, aes(x = blogs_freq_tab_1_sub$order, y = blogs_freq_tab_1_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 1-grams in Blogs Corpus") +
+    geom_bar(colour="green", fill="blue", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(blogs_freq_tab_1_sub.plot)
+
+## News 2-grams
+news_freq_tab_2_sub <- as.data.frame(head(news_freq_tab_2, n = 20)); news_freq_tab_2_sub$order <- factor(news_freq_tab_2_sub$gram, as.character(news_freq_tab_2_sub$gram))
+
+news_freq_tab_2_sub.plot <- ggplot(news_freq_tab_2_sub, aes(x = news_freq_tab_2_sub$order, y = news_freq_tab_2_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 2-grams in News Corpus") +
+    geom_bar(colour="pink", fill="purple", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(news_freq_tab_2_sub.plot)
+
+## Tweets 3-grams
+
+tweets_freq_tab_3_sub <- as.data.frame(head(tweets_freq_tab_3, n = 20)); tweets_freq_tab_3_sub$order <- factor(tweets_freq_tab_3_sub$gram, as.character(tweets_freq_tab_3_sub$gram))
+
+tweets_freq_tab_3_sub.plot <- ggplot(tweets_freq_tab_3_sub, aes(x = tweets_freq_tab_3_sub$order, y = tweets_freq_tab_3_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 3-grams in Twitter Corpus") +
+    geom_bar(colour="green", fill="yellow", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(tweets_freq_tab_3_sub.plot)
+
+## Blogs 4-grams
+
+blogs_freq_tab_4_sub <- as.data.frame(head(blogs_freq_tab_4, n = 20)); blogs_freq_tab_4_sub$order <- factor(blogs_freq_tab_4_sub$gram, as.character(blogs_freq_tab_4_sub$gram))
+
+blogs_freq_tab_4_sub.plot <- ggplot(blogs_freq_tab_4_sub, aes(x = blogs_freq_tab_4_sub$order, y = blogs_freq_tab_4_sub$frequency)) + 
+    geom_bar(stat="identity") + coord_flip() + xlab("") + ylab("") + ggtitle("Top 20 4-grams in Blogs Corpus") +
+    geom_bar(colour="orange", fill="turquoise", width=.7, stat="identity") + 
+    theme(plot.background = element_blank() ,panel.grid.major = element_blank() ,panel.grid.minor = element_blank(),     
+    panel.border = element_blank())
+
+plot(blogs_freq_tab_4_sub.plot)
+
+# Clean up
+rm(x_name); rm(y_name)
+rm(blogs_tok); rm(blogs_tok_2); rm(blogs_tok_3); rm(blogs_tok_4)
+rm(blogs_words); rm(blogs_words_2); rm(blogs_words_3); rm(blogs_words_4)
+rm(blogs_freq_1); rm(blogs_freq_2); rm(blogs_freq_3); rm(blogs_freq_4)
+
+rm(news_tok); rm(news_tok_2); rm(news_tok_3); rm(news_tok_4)
+rm(news_words); rm(news_words_2); rm(news_words_3); rm(news_words_4)
+rm(news_freq_1); rm(news_freq_2); rm(news_freq_3); rm(news_freq_4)
+
+rm(tweets_tok); rm(tweets_tok_2); rm(tweets_tok_3); rm(tweets_tok_4)
+rm(tweets_words); rm(tweets_words_2); rm(tweets_words_3); rm(tweets_words_4)
+rm(tweets_freq_1); rm(tweets_freq_2); rm(tweets_freq_3); rm(tweets_freq_4)
+
+rm(blogs_freq_tab_1_sub); rm(blogs_freq_tab_1_sub.plot)
+rm(news_freq_tab_2_sub); rm(news_freq_tab_2_sub.plot)
+rm(tweets_freq_tab_3_sub); rm(tweets_freq_tab_3_sub.plot)
+rm(blogs_freq_tab_4_sub); rm(blogs_freq_tab_4_sub.plot)
+```
+                                                                                                                                                                                                  
+
+## Modeling 
+
+For the milestone:
+
+- mention thorny issue of contractions; try to come up with a principled way of tackling the problem.
+- address goals for the eventual app and algorithm
+- briefly summarize your plans for creating the prediction algorithm and Shiny app
