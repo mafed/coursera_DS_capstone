@@ -96,7 +96,7 @@ blogs.rest.5 <- str_replace_all(blogs.rest.4, "  ", replacement = " ")
 write.table(blogs.rest.5, file = "./rest/blogs.rest_cleaned.txt")
 
 ### Clean up
-rm(blogs.rest); rm(blogs.rest.1); rm(blogs.rest.2); rm(blogs.rest.3); rm(blogs.rest.4); rm(blogs.rest.5)
+rm(blogs.rest); rm(blogs.rest.1); rm(blogs.rest.2); rm(blogs.rest.3); rm(blogs.rest.4)
 
 ## news.rest
 news.rest.1 <- tolower(news.rest)
@@ -107,7 +107,7 @@ news.rest.5 <- str_replace_all(news.rest.4, "  ", replacement = " ")
 write.table(news.rest.5, file = "./rest/news.rest_cleaned.txt")
 
 ### Clean up
-rm(news.rest); rm(news.rest.1); rm(news.rest.2); rm(news.rest.3); rm(news.rest.4); rm(news.rest.5)  
+rm(news.rest); rm(news.rest.1); rm(news.rest.2); rm(news.rest.3); rm(news.rest.4)
 
 ## tweets.rest
 tweets.rest.1 <- tolower(tweets.rest)
@@ -119,14 +119,12 @@ write.table(tweets.rest.5, file = "./rest/tweets.rest_cleaned.txt")
 
 ## Clean up
 rm(profanity_list)
-rm(tweets.rest); rm(tweets.rest.1); rm(tweets.rest.2); rm(tweets.rest.3); rm(tweets.rest.4); rm(tweets.rest.5)  
+rm(tweets.rest); rm(tweets.rest.1); rm(tweets.rest.2); rm(tweets.rest.3); rm(tweets.rest.4)
 
 ```
 
 
-## Tokenization and n-gram construction
-
-In the next step of data processing, we use R's [stylo](https://sites.google.com/site/computationalstylistics/stylo) package to tokenize the data. Tokenization allows us to check for words that are extrememly infrequent, which we don't want to predict. We look first at the blogs data.
+In the next step of data processing, we use R's [stylo](https://sites.google.com/site/computationalstylistics/stylo) package to look at highly infrequent terms in the data. A quick look at the blogs data (below) reveals that almost half (46%) of the tokens only occur once. 
 
 ```{r}
 suppressPackageStartupMessages(require("stylo"))
@@ -143,48 +141,60 @@ blogs_freq_1 <- as.numeric(make.table.of.frequencies(blogs_corp, blogs_words, re
 blogs_freq_tab_1 <- data.frame(blogs_words, blogs_freq_1); names(blogs_freq_tab_1) <- c(x_name, y_name)
 
 # Look at frequency of unigrams w/ n = 1
-blogs_1grams.to_del <- subset(blogs_freq_tab_1, frequency <= 1)
-cat('In this subset of 90% of the blogs text file, about', round((length(blogs_freq_tab_1.not_freq$grams) / length(blogs_freq_tab_1$grams) * 100), digits = 0), '% of the tokens occur only once. Here are some examples:')
+blogs_1grams.nof1 <- subset(blogs_freq_tab_1, frequency <= 1)
+cat('Out of', length(blogs_freq_tab_1$grams), 'tokens, about', round((length(blogs_1grams.nof1$grams) / length(blogs_freq_tab_1$grams) * 100), digits = 0), '% occur only once. Here are some examples:')
 
-print(blogs_freq_tab_1.not_freq[sample(nrow(blogs_freq_tab_1.not_freq), 5), ])
+print(blogs_freq_tab_1.not_freq[sample(nrow(blogs_1grams.nof1), 5), ])
 
 # Clean up (COME BACK TO THIS!!!)
-rm(blogs_words); rm(blogs_freq_1); rm(blogs_freq_tab_1.not_freq)
+rm(blogs_words); rm(blogs_freq_1)
 
 ```
 
-Seeing that a substantial portion of the tokens are very infrequent and having no reason to suspect that the news and Twitter datasets should be any different, we load in the other two files and make a subset of words to be eliminated from the "training" and "corpora" text files.
-
+Seeing that a substantial portion of the tokens are very infrequent and having no reason to suspect that the news and Twitter datasets should be any different, we tokenize all 3 data files using a faster method implemented with R's [stringi](http://cran.r-project.org/web/packages/stringi/index.html) package. Finally, we subset the data such that only unigrams with n > 1 remain.
 
 ```{r}
-dir.create(path = "./ngrams/")
+suppressPackageStartupMessages(require("stringi"))
 
-# Load in remaining data, tokenize, make word lists and frequency tables 
+# Load in remaining data and tokenize, then make tables with frequencies
 news_corp <- load.corpus.and.parse(files = "news.rest_cleaned.txt", corpus.dir = "./rest", markup.type = "plain",
                                     language = "English.all", splitting.rule = NULL)
+
+
+news_corp <- load.corpus(files = "news.rest_cleaned.txt", corpus.dir = "./rest")
+news_tok <- txt.to.words(news_corp)
+
 tweets_corp <- load.corpus.and.parse(files = "tweets.rest_cleaned.txt", corpus.dir = "./rest", markup.type = "plain",
                                     language = "English.all", splitting.rule = NULL)
+blogs_tab <- as.data.frame(table(blogs_corp)); names(blogs_tab) <- c(x_name, y_name)
+news_tab <- as.data.frame(table(news_corp)); names(news_tab) <- c(x_name, y_name)
+tweets_tab <- as.data.frame(table(tweets_corp)); names(tweets_tab) <- c(x_name, y_name)
 
-news_words = names(sort(table(unlist(news_corp)), decreasing = TRUE))
-news_freq_1 <- as.numeric(make.table.of.frequencies(news_corp, news_words, relative = FALSE))
-news_freq_tab_1 <- data.frame(news_words, news_freq_1); names(news_freq_tab_1) <- c(x_name, y_name)
+# Subset and combine
+blogs_tab_nof1 <- subset(blogs_tab, frequency <= 1)
+news_tab_nof1 <- subset(news_tab, frequency <= 1)
+tweets_tab_nof1 <- subset(tweets_tab, frequency <= 1)
 
-tweets_words = names(sort(table(unlist(tweets_corp)), decreasing = TRUE))
-tweets_freq_1 <- as.numeric(make.table.of.frequencies(tweets_corp, tweets_words, relative = FALSE))
-tweets_freq_tab_1 <- data.frame(tweets_words, tweets_freq_1); names(tweets_freq_tab_1) <- c(x_name, y_name)
+unigrams_nof1 <- rbind(blogs_tab_nof1, news_tab_nof1, tweets_tab_nof1); unigrams_nof1 <- subset(unigrams_nof1, select = grams)
 
-# Subsetting
-news_1grams.to_del <- subset(news_freq_tab_1, frequency <= 1)
-tweets_1grams.to_del <- subset(tweets_freq_tab_1, frequency <= 1)
+# Write new data files that don't include words with n = 1
+blogs.rest_cleaned2 <- delete.stop.words(blogs.rest.5, stop.words = unigrams_nof1[["grams"]])
+news.rest_cleaned2 <- delete.stop.words(news.rest.5, stop.words = unigrams_nof1[["grams"]])
+  
+  str_replace_all(blogs.rest.5, paste(unigrams_nof1, collapse = "|"), replacement = "")
+news.rest_cleaned2 <-
+tweets.rest_cleaned2 <- 
 
-# Write to new files
-write.table(blogs_freq_tab_1.keep, file = "./ngrams/blogs_freq_tab_1.keep.txt")
-write.table(news_freq_tab_1.keep, file = "./ngrams/news_freq_tab_1.keep.txt")
-write.table(tweets_freq_tab_1.keep, file = "./ngrams/tweets_freq_tab_1.keep.txt")
 
-# 
 
-# Cleaning up
+
+tweets.rest_cleaned2 <- 
+
+tweets.rest.4 <- str_replace_all(tweets.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+
+
+# Cleaning up (COME BACK TO THIS!!!) --> be sure to make or include table of unigrams that is identical to how bigrams are stored later on
 rm(blogs_freq_tab_1); rm(x_name); rm(y_name)
 rm(news_corp); rm(news_words); rm(news_freq_1); rm(news_freq_tab_1)
 rm(tweets_corp); rm(tweets_words); rm(tweets_freq_1); rm(tweets_freq_tab_1)
@@ -195,6 +205,9 @@ We now make 2-, 3- and 4-grams from the remaining data.
 
 ```{r}
 # Make 2-, 3- and 4-grams
+
+
+
 blogs_tok_2 <- make.ngrams(blogs_tok, ngram.size = 2); blogs_tok_3 <- make.ngrams(blogs_tok, ngram.size = 3); blogs_tok_4 <- make.ngrams(blogs_tok, ngram.size = 4)
 
 news_tok_2 <- make.ngrams(news_tok, ngram.size = 2); news_tok_3 <- make.ngrams(news_tok, ngram.size = 3); news_tok_4 <- make.ngrams(news_tok, ngram.size = 4)
