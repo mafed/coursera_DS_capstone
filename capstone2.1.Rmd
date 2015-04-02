@@ -1,0 +1,258 @@
+---
+title: "Capstone Project"
+author: "Christopher Stewart"
+date: "March 25, 2015"
+output: html_document
+---
+
+## Introduction 
+This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use large text files to build a text prediction algorithmthat is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation](insert URL here).
+
+I have elected to complete the project in R as per the parameters of the assignment, but also in Python to get hands-on experience with the Python's Natural Language Toolkit ([NLTK](http://www.nltk.org/)). A report on the Python version of the project is available [here](insert URL here).
+
+
+## Data preparation and exploration
+
+### Data Acquisition
+
+Initially, we download the data and unzip the data files, switching working directories to that of the English language text files. We then print out the contents of the current directory to ensure that everything is in order.
+
+```{r data acquisition}
+suppressPackageStartupMessages(require("downloader")); suppressPackageStartupMessages(require("R.utils"))
+
+# Download, unzip data and setwd()
+url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download(url, dest = "data.zip", mode = "wb")
+unzip("data.zip", exdir = "./")
+
+# Set working directory
+setwd(paste(getwd(),"/final/en_US",sep=""))
+list.files()
+
+# Clean up
+rm(url)
+```
+
+
+### Test, Training and Corpus Split
+
+Next we read in the data and divide the "blogs", "news" and "twitter" data into three parts:
+
+1. Our _test_ set will be used as a final metric of the accuracy of the text prediction algorithm. For it, we set aside 10% of each data file.
+
+2. From the remaining 90%, 10% is set aside as _training_ data, to be used to improve the model derived from the bulk of the data. 
+
+3. The remaining data will be referred to as the _corpus_ data. This data will be used to develop the initial model. 
+
+
+```{r data cleaning}
+suppressPackageStartupMessages(require("stats"))
+dir.create(path = "./test/")
+
+# Read in data
+blogs <- readLines("en_US.blogs.txt")
+news <- readLines("en_US.news.txt")
+tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
+
+# Subsetting
+set.seed(1)
+blogs.test <- blogs[sample(1:length(blogs), 0.10*length(blogs), replace = FALSE)]
+blogs.rest <- blogs[!blogs %in% blogs.test]
+write.table(blogs.test, file = "./test/blogs.test.txt")
+
+news.test <- news[sample(1:length(news), 0.10*length(news), replace = FALSE)]
+news.rest <- news[!news %in% news.test]
+write.table(news.test, file = "./test/news.test.txt")
+
+tweets.test <- tweets[sample(1:length(tweets), 0.10*length(tweets), replace = FALSE)]
+tweets.rest <- tweets[!tweets %in% tweets.test]
+write.table(tweets.test, file = "./test/tweets.test.txt")
+
+# Clean up
+rm(blogs); rm(news); rm(tweets)
+rm(blogs.test); rm(news.test); rm(tweets.test)
+
+```
+
+
+### Data cleaning
+
+A quick look at the first few lines of each corpus reveal the presence of elements that we *don't want* to predict, including emoticons, numbers, profanity, punctuation, etc. We clean our corpora so that these do not go into the models. 
+
+```{r}
+suppressPackageStartupMessages(require("stringr"))
+
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+## blogs.rest
+blogs.rest.1 <- tolower(blogs.rest)
+blogs.rest.2 <- str_replace_all(blogs.rest.1, "[^[:alnum:]]", " "); blogs.rest.2 <- iconv(blogs.rest.2, from="UTF-8", to="ascii", sub=""); blogs.rest.2 <- iconv(blogs.rest.2, to="ASCII//TRANSLIT")
+blogs.rest.3 <- str_replace_all(blogs.rest.2, "[[:digit:]]+", " ")
+blogs.rest.4 <- str_replace_all(blogs.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+### Clean up
+rm(blogs.rest); rm(blogs.rest.1); rm(blogs.rest.2); rm(blogs.rest.3)
+
+## news.rest
+news.rest.1 <- tolower(news.rest)
+news.rest.2 <- str_replace_all(news.rest.1, "[^[:alnum:]]", " "); news.rest.2 <- iconv(news.rest.2, from="UTF-8", to="ascii", sub=""); news.rest.2 <- iconv(news.rest.2, to="ASCII//TRANSLIT")
+news.rest.3 <- str_replace_all(news.rest.2, "[[:digit:]]+", " ")
+news.rest.4 <- str_replace_all(news.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+### Clean up
+rm(news.rest); rm(news.rest.1); rm(news.rest.2); rm(news.rest.3)
+
+## tweets.rest
+tweets.rest.1 <- tolower(tweets.rest)
+tweets.rest.2 <- str_replace_all(tweets.rest.1, "[^[:alnum:]]", " "); tweets.rest.2 <- iconv(tweets.rest.2, from="UTF-8", to="ascii", sub=""); tweets.rest.2 <- iconv(tweets.rest.2, to="ASCII//TRANSLIT")
+tweets.rest.3 <- str_replace_all(tweets.rest.2, "[[:digit:]]+", " ")
+tweets.rest.4 <- str_replace_all(tweets.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+## Clean up
+rm(profanity_list)
+rm(tweets.rest); rm(tweets.rest.1); rm(tweets.rest.2); rm(tweets.rest.3)
+
+```
+
+
+In the next step of data processing, we use R's [stringi](http://cran.r-project.org/web/packages/stringi/index.html) package to look at highly infrequent terms in the data. A quick look at the blogs data (below) reveals that almost half (46%) of the tokens only occur once. 
+
+```{r}
+suppressPackageStartupMessages(require("stringi"))
+x_name <- "grams"; y_name <- "frequency"
+
+blogs.rest.tok <- sort(table(unlist(strsplit(blogs.rest.4, split = "[[:space:]]+"))), decreasing=TRUE)
+blogs.rest.tok_freqs <- as.numeric(unlist(regmatches(blogs.rest.tok, gregexpr("[[:digit:]]+", blogs.rest.tok))))
+blogs.rest.tok_tab = data.frame(names(blogs.rest.tok), blogs.rest.tok_freqs); names(blogs.rest.tok_tab) <- c(x_name, y_name)
+
+# Look at frequency of unigrams w/ n = 1
+blogs_1grams.nof1 <- subset(blogs.rest.tok_tab, frequency <= 1)
+cat('Out of', length(blogs.rest.tok_tab$grams), 'tokens, about', round((length(blogs_1grams.nof1$grams) / length(blogs.rest.tok_tab$grams) * 100), digits = 0), '% occur only once.')
+
+# Clean up
+rm(blogs.rest.tok); rm(blogs.rest.tok_freqs); rm(blogs.rest.tok_tab); rm(blogs_1grams.nof1)
+
+```
+
+This finding suggests a high degree of sparsity in the data, an issue that will have to be addressed during model building.
+
+### Sampling 
+
+Seeing the large size of the corpora and cognizant of the fact that a representative sample is sufficient for model building, we next take a random subsample of the data. We first compute the n necessary for a representative sample size, then we draw a random sample from each of the data files.
+
+```{r sampling}
+suppressPackageStartupMessages(require("stats"))
+dir.create(path = "./samples/")
+
+# Compute sample size needed
+sample_size <- round(power.t.test(n = NULL, sig.level = .01, power = .8, d = .05)$n, digits = 0)
+
+# Draw samples
+blogs.rest_samp <- sample(blogs.rest.4, sample_size)
+news.rest_samp <- sample(news.rest.4, sample_size)
+tweets.rest_samp <- sample(tweets.rest.4, sample_size)
+
+```
+
+### Tokenization, n-gram construction and frequency table generation
+
+Having drawn our samples, we now tokenize and produce 2- and 3-grams using Maciej Szymkiewicz's efficient [Ngrams_tokenizer](https://github.com/zero323/r-snippets/blob/master/R/ngram_tokenizer.R) function.
+
+```{r}
+source("Ngrams_tokenizer.R")
+dir.create(path = "./tokenized/")
+
+unigram.tokenizer <- ngram_tokenizer(1)
+blogs.samp_tok <- unigram.tokenizer(blogs.rest_samp)
+news.samp_tok <- unigram.tokenizer(news.rest_samp)
+tweets.samp_tok <- unigram.tokenizer(tweets.rest_samp)
+write.table(blogs.rest_samp, file = "./tokenized/blogs.samp_tok.txt"); write.table(news.samp_tok, file = "./tokenized/news.samp_tok.txt"); write.table(tweets.samp_tok, file = "./tokenized/tweets.samp_tok.txt")
+
+bigram.tokenizer <- ngram_tokenizer(2)
+blogs.samp_bi <- bigram.tokenizer(blogs.rest_samp)
+news.samp_bi <- bigram.tokenizer(news.rest_samp)
+tweets.samp_bi <- bigram.tokenizer(tweets.rest_samp)
+write.table(blogs.samp_bi, file = "./tokenized/blogs.samp_bi.txt"); write.table(news.samp_bi, file = "./tokenized/news.samp_bi.txt"); write.table(tweets.samp_bi, file = "./tokenized/tweets.samp_bi.txt")
+
+trigram.tokenizer <- ngram_tokenizer(3)
+blogs.samp_tri <- trigram.tokenizer(blogs.rest_samp)
+news.samp_tri <- trigram.tokenizer(news.rest_samp)
+tweets.samp_tri <- trigram.tokenizer(tweets.rest_samp)
+write.table(blogs.samp_tri, file = "./tokenized/blogs.samp_tri.txt"); write.table(news.samp_tri, file = "./tokenized/news.samp_tri.txt"); write.table(tweets.samp_tri, file = "./tokenized/tweets.samp_tri.txt")
+
+#Clean up
+rm(ngram_tokenizer); rm(bigram.tokenizer); rm(trigram.tokenizer)
+```
+
+Next we create the frequency tables for our tokenized, 2- and 3-grams which we will subsequently use to build our first models.
+
+```{r frequency tables}
+
+# Frequency tables for unigrams
+blogs.samp_tok_sort <- sort(table(blogs.samp_tok), decreasing = TRUE)
+blogs.samp_tokfreqs <- as.numeric(unlist(regmatches(blogs.samp_tok_sort, gregexpr("[[:digit:]]+", blogs.samp_tok_sort))))
+blogs.tok_tab = data.frame(names(blogs.samp_tok_sort), blogs.samp_tokfreqs); names(blogs.tok_tab) <- c(x_name, y_name)
+
+news.samp_tok_sort <- sort(table(news.samp_tok), decreasing = TRUE)
+news.samp_tokfreqs <- as.numeric(unlist(regmatches(news.samp_tok_sort, gregexpr("[[:digit:]]+", news.samp_tok_sort))))
+news.tok_tab = data.frame(names(news.samp_tok_sort), news.samp_tokfreqs); names(news.tok_tab) <- c(x_name, y_name)
+
+tweets.samp_tok_sort <- sort(table(tweets.samp_tok), decreasing = TRUE)
+tweets.samp_tokfreqs <- as.numeric(unlist(regmatches(tweets.samp_tok_sort, gregexpr("[[:digit:]]+", tweets.samp_tok_sort))))
+tweets.tok_tab = data.frame(names(tweets.samp_tok_sort), tweets.samp_tokfreqs); names(tweets.tok_tab) <- c(x_name, y_name)
+
+# Frequency tables for bigrams
+blogs.samp_bi_sort <- sort(table(blogs.samp_bi), decreasing = TRUE)
+blogs.samp_bifreqs <- as.numeric(unlist(regmatches(blogs.samp_bi_sort, gregexpr("[[:digit:]]+", blogs.samp_bi_sort))))
+blogs.bi_tab = data.frame(names(blogs.samp_bi_sort), blogs.samp_bifreqs); names(blogs.bi_tab) <- c(x_name, y_name)
+
+news.samp_bi_sort <- sort(table(news.samp_bi), decreasing = TRUE)
+news.samp_bifreqs <- as.numeric(unlist(regmatches(news.samp_bi_sort, gregexpr("[[:digit:]]+", news.samp_bi_sort))))
+news.bi_tab = data.frame(names(news.samp_bi_sort), news.samp_bifreqs); names(news.bi_tab) <- c(x_name, y_name)
+
+tweets.samp_bi_sort <- sort(table(tweets.samp_bi), decreasing = TRUE)
+tweets.samp_bifreqs <- as.numeric(unlist(regmatches(tweets.samp_bi_sort, gregexpr("[[:digit:]]+", tweets.samp_bi_sort))))
+tweets.bi_tab = data.frame(names(tweets.samp_bi_sort), tweets.samp_bifreqs); names(tweets.bi_tab) <- c(x_name, y_name)
+
+# Frequency tables for trigrams
+blogs.samp_tri_sort <- sort(table(blogs.samp_tri), decreasing = TRUE)
+blogs.samp_trifreqs <- as.numeric(unlist(regmatches(blogs.samp_tri_sort, gregexpr("[[:digit:]]+", blogs.samp_tri_sort))))
+blogs.tri_tab = data.frame(names(blogs.samp_tri_sort), blogs.samp_trifreqs); names(blogs.tri_tab) <- c(x_name, y_name)
+
+news.samp_tri_sort <- sort(table(news.samp_tri), decreasing = TRUE)
+news.samp_trifreqs <- as.numeric(unlist(regmatches(news.samp_tri_sort, gregexpr("[[:digit:]]+", news.samp_tri_sort))))
+news.tri_tab = data.frame(names(news.samp_tri_sort), news.samp_trifreqs); names(news.tri_tab) <- c(x_name, y_name)
+
+tweets.samp_tri_sort <- sort(table(tweets.samp_tri), decreasing = TRUE)
+tweets.samp_trifreqs <- as.numeric(unlist(regmatches(tweets.samp_tri_sort, gregexpr("[[:digit:]]+", tweets.samp_tri_sort))))
+tweets.tri_tab = data.frame(names(tweets.samp_tri_sort), tweets.samp_trifreqs); names(tweets.tri_tab) <- c(x_name, y_name)
+```
+
+The final stop before building language models is to generate probablities for our unigrams, bigrams and trigrams. 
+
+```{r building probability tables}
+suppressPackageStartupMessages(require("plyr"))
+
+# Include probablity columns in unigram frequency tables
+blogs.tok_tab$p <- blogs.tok_tab$frequency / sum(blogs.tok_tab$frequency)
+news.tok_tab$p <- news.tok_tab$frequency / sum(news.tok_tab$frequency)
+tweets.tok_tab$p <- tweets.tok_tab$frequency / sum(tweets.tok_tab$frequency)
+
+# For bigrams, split "grams" into wi & w(i-1), then add probablity columns to frequency tables
+x_name <- "gram"; y_name <- "target"
+blogs.bi_tab1 <- strsplit(as.character(blogs.bi_tab$grams), " "); blogs.bi_tab2 <- rbind.fill(lapply(blogs.bi_tab1, function(X) data.frame(t(X))))
+  
+
+
+blogs.tok_tab$p <- blogs.tok_tab$frequency / sum(blogs.tok_tab$frequency)
+news.tok_tab$p <- news.tok_tab$frequency / sum(news.tok_tab$frequency)
+tweets.tok_tab$p <- tweets.tok_tab$frequency / sum(tweets.tok_tab$frequency)
+
+
+
+```
+
+
+
+
+
