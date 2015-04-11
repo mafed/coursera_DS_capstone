@@ -1,0 +1,568 @@
+---
+title: "Capstone 2.2"
+author: "Christopher Stewart"
+date: "April 9, 2015"
+output: html_document
+---
+## Introduction 
+This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use large text files to build a text prediction algorithmthat is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation](insert URL here).
+
+I have elected to complete the project in R as per the parameters of the assignment, but also in Python to get hands-on experience with the Python's Natural Language Toolkit ([NLTK](http://www.nltk.org/)). A report on the Python version of the project is available [here](insert URL here).
+
+
+## Data preparation and exploration
+
+### Data Acquisition
+
+Initially, we download the data and unzip the data files, switching working directories to that of the English language text files. We then print out the contents of the current directory to ensure that everything is in order.
+
+```{r data acquisition}
+suppressPackageStartupMessages(require("downloader")); suppressPackageStartupMessages(require("R.utils"))
+
+# Download, unzip data and setwd()
+url <- "http://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download(url, dest = "data.zip", mode = "wb")
+unzip("data.zip", exdir = "./")
+
+# Set working directory
+setwd(paste(getwd(),"/final/en_US",sep=""))
+list.files()
+
+# Clean up
+rm(url)
+```
+
+SET ASIDE TEST DATA
+
+```{r load and separate test from rest}
+suppressPackageStartupMessages(require("stats"))
+
+blogs <- readLines("en_US.blogs.txt")
+news <- readLines("en_US.news.txt")
+tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
+
+set.seed(1)
+blogs.test <- blogs[sample(1:length(blogs), 0.10*length(blogs), replace = FALSE)]
+blogs.rest <- blogs[!blogs %in% blogs.test]
+
+news.test <- news[sample(1:length(news), 0.10*length(news), replace = FALSE)]
+news.rest <- news[!news %in% news.test]
+
+tweets.test <- tweets[sample(1:length(tweets), 0.10*length(tweets), replace = FALSE)]
+tweets.rest <- tweets[!tweets %in% tweets.test]
+
+# Clean up
+rm(blogs); rm(news); rm(tweets)
+rm(blogs.test); rm(news.test); rm(tweets.test)
+```
+
+CLEAN UP "REST" VIA REGEX
+
+```{r clean data using regex}
+suppressPackageStartupMessages(require("stringr"))
+
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+# blogs
+blogs.rest.1 <- tolower(blogs.rest)
+blogs.rest.2 <- str_replace_all(blogs.rest.1, "[^[:alnum:][:space:]'|’]", ""); blogs.rest.2 <- iconv(blogs.rest.2, from="UTF-8", to="ascii", sub=""); blogs.rest.2 <- iconv(blogs.rest.2, to="ASCII//TRANSLIT")
+blogs.rest.3 <- str_replace_all(blogs.rest.2, "[[:digit:]]+", "")
+blogs.rest.4 <- str_replace_all(blogs.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+### Clean up
+rm(blogs.rest); rm(blogs.rest.1); rm(blogs.rest.2); rm(blogs.rest.3)
+
+# news
+news.rest.1 <- tolower(news.rest)
+news.rest.2 <- str_replace_all(news.rest.1, "[^[:alnum:][:space:]'|’]", ""); news.rest.2 <- iconv(news.rest.2, from="UTF-8", to="ascii", sub=""); news.rest.2 <- iconv(news.rest.2, to="ASCII//TRANSLIT")
+news.rest.3 <- str_replace_all(news.rest.2, "[[:digit:]]+", "")
+news.rest.4 <- str_replace_all(news.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+### Clean up
+rm(news.rest); rm(news.rest.1); rm(news.rest.2); rm(news.rest.3)
+
+# tweets
+tweets.rest.1 <- tolower(tweets.rest)
+tweets.rest.2 <- str_replace_all(tweets.rest.1, "[^[:alnum:][:space:]'|’]", ""); tweets.rest.2 <- iconv(tweets.rest.2, from="UTF-8", to="ascii", sub=""); tweets.rest.2 <- iconv(tweets.rest.2, to="ASCII//TRANSLIT")
+tweets.rest.3 <- str_replace_all(tweets.rest.2, "[[:digit:]]+", "")
+tweets.rest.4 <- str_replace_all(tweets.rest.3, paste(profanity_list, collapse = "|"), replacement = "")
+
+## Clean up
+rm(tweets.rest); rm(tweets.rest.1); rm(tweets.rest.2); rm(tweets.rest.3)
+
+```
+
+SEPARATE "CORPUS" FROM "TEST" DATA
+
+```{r separating corpus (80%) from validation (10%) data}
+
+set.seed(2)
+blogs.val <- blogs.rest.4[sample(1:length(blogs.rest.4), 0.10*length(blogs.rest.4), replace = FALSE)]; blogs.corpus <- blogs.rest.4[!blogs.rest.4 %in% blogs.val]
+
+news.val <- news.rest.4[sample(1:length(news.rest.4), 0.10*length(news.rest.4), replace = FALSE)]; news.corpus <- news.rest.4[!news.rest.4 %in% news.val]
+
+
+tweets.val <- tweets.rest.4[sample(1:length(tweets.rest.4), 0.10*length(tweets.rest.4), replace = FALSE)]; tweets.corpus <- tweets.rest.4[!tweets.rest.4 %in% tweets.val]
+
+#Clean up
+rm(blogs.rest.4); rm(news.rest.4); rm(tweets.rest.4)
+```
+
+TOKENIZE
+
+```{r create ngrams}
+dir.create(path = "./tokenized/")
+
+source("Ngrams_tokenizer.R")
+tokenizer <- ngram_tokenizer(1)
+blogs.corpus_tok <- tokenizer(blogs.corpus)
+news.corpus_tok <- tokenizer(news.corpus)
+tweets.corpus_tok <- tokenizer(tweets.corpus)
+write.table(blogs.corpus_tok, file = "./tokenized/blogs.corpus_tok.txt")
+write.table(news.corpus_tok, file = "./tokenized/news.corpus_tok.txt")
+write.table(tweets.corpus_tok, file = "./tokenized/tweets.corpus_tok.txt")
+```
+
+TOKENS WITH C(W) <= 5 BECOME "UNK", CALCULATE PS FOR UNIGRAMS
+
+```{r unigrams}
+suppressPackageStartupMessages(require("data.table"))
+setwd(paste(getwd(),"/tokenized",sep=""))
+
+## Blogs
+# Read in, replace C(W) <= 5 w/ "UNK", calculate ps
+blogs.corpus_tok <- fread("blogs.corpus_tok.txt"); blogs.corpus_tok[,c(1,2,4) := NULL]; setnames(blogs.corpus_tok, "V3", "token")
+
+blogs.corpus_tokC <- blogs.corpus_tok[,token.count:=.N, by = token]
+blogs.corpus_tokC1 <- blogs.corpus_tokC[token.count <= 5, token := "UNK"]
+blogs.corpus_tokC2 <- blogs.corpus_tokC1[,p := round((token.count / nrow(blogs.corpus_tokC1)), digits = 7)]
+blogs.corpus_tokC2[, 2 := NULL]
+
+blogs.corpus_tokC2[, token.index:=.GRP, by = token]
+
+# Write p-values, indices and words -> indices to file
+blogs.tok_ps <- blogs.corpus_tokC2[, p]
+write.table(blogs.tok_ps,"blogs.pvals.csv", sep=",", row.names = FALSE)
+blogs.tok_ind <- blogs.corpus_tokC2[, token.index]
+write.table(blogs.tok_ind,"blogs.indices.csv", sep=",", row.names = FALSE)
+blogs.tok_wordind <- blogs.corpus_tokC2[,. (token,token.index)]
+write.table(blogs.tok_wordind,"blogs.wordindices.csv", sep=",", row.names = FALSE)
+
+# Clean up
+rm(blogs.corpus_tok); rm(blogs.corpus_tokC); rm(blogs.corpus_tokC1); rm(blogs.corpus_tokC2); rm(blogs.tok_ps); rm(blogs.tok_ind); rm(blogs.tok_wordind)
+
+
+## News
+# Read in, replace C(W) <= 5 w/ "UNK", calculate ps
+news.corpus_tok <- fread("news.corpus_tok.txt"); news.corpus_tok[,c(1,2,4) := NULL]; setnames(news.corpus_tok, "V3", "token")
+
+news.corpus_tokC <- news.corpus_tok[,token.count:=.N, by = token]
+news.corpus_tokC1 <- news.corpus_tokC[token.count <= 5, token := "UNK"]
+news.corpus_tokC2 <- news.corpus_tokC1[,p := round((token.count / nrow(news.corpus_tokC1)), digits = 7)]
+news.corpus_tokC2[, 2 := NULL]
+
+news.corpus_tokC2[, token.index:=.GRP, by = token]
+
+# Write p-values, indices and words -> indices to file
+news.tok_ps <- news.corpus_tokC2[, p]
+write.table(news.tok_ps,"news.pvals.csv", sep=",", row.names = FALSE)
+news.tok_ind <- news.corpus_tokC2[, token.index]
+write.table(news.tok_ind,"news.indices.csv", sep=",", row.names = FALSE)
+news.tok_wordind <- news.corpus_tokC2[,. (token,token.index)]
+write.table(news.tok_wordind,"news.wordindices.csv", sep=",", row.names = FALSE)
+
+# Clean up
+rm(news.corpus_tok); rm(news.corpus_tokC); rm(news.corpus_tokC1); rm(news.corpus_tokC2); rm(news.tok_ps); rm(news.tok_ind); rm(news.tok_wordind)
+
+
+## Tweets
+# Read in, replace C(W) <= 5 w/ "UNK", calculate ps
+tweets.corpus_tok <- fread("tweets.corpus_tok.txt"); tweets.corpus_tok[,c(1,2,4) := NULL]; setnames(tweets.corpus_tok, "V3", "token")
+
+tweets.corpus_tokC <- tweets.corpus_tok[,token.count:=.N, by = token]
+tweets.corpus_tokC1 <- tweets.corpus_tokC[token.count <= 5, token := "UNK"]
+tweets.corpus_tokC2 <- tweets.corpus_tokC1[,p := round((token.count / nrow(tweets.corpus_tokC1)), digits = 7)]
+tweets.corpus_tokC2[, 2 := NULL]
+
+tweets.corpus_tokC2[, token.index:=.GRP, by = token]
+
+# Write p-values, indices and words -> indices to file
+tweets.tok_ps <- tweets.corpus_tokC2[, p]
+write.table(tweets.tok_ps,"tweets.pvals.csv", sep=",", row.names = FALSE)
+tweets.tok_ind <- tweets.corpus_tokC2[, token.index]
+write.table(tweets.tok_ind,"tweets.indices.csv", sep=",", row.names = FALSE)
+tweets.tok_wordind <- tweets.corpus_tokC2[,. (token,token.index)]
+write.table(tweets.tok_wordind,"tweets.wordindices.csv", sep=",", row.names = FALSE)
+
+# Clean up
+rm(tweets.corpus_tok); rm(tweets.corpus_tokC); rm(tweets.corpus_tokC1); rm(tweets.corpus_tokC2); rm(tweets.tok_ps); rm(tweets.tok_ind); rm(tweets.tok_wordind)
+
+```
+
+MAKE BIGRAMS OUT OF INDICES
+
+```{r make bigrams}
+
+# Load in data in indices, switch to matrix, transpose and group by 2
+blogs.indices <- fread("blogs.indices.csv")
+blogs.indices1 <- t(blogs.indices)
+blogs.bi <- split(blogs.indices1, ceiling(seq_along(blogs.indices1)/2))
+
+news.indices <- fread("news.indices.csv")
+news.indices1 <- t(news.indices)
+news.bi <- split(news.indices1, ceiling(seq_along(news.indices1)/2))
+
+tweets.indices <- fread("tweets.indices.csv")
+tweets.indices1 <- t(tweets.indices)
+tweets.bi <- split(tweets.indices1, ceiling(seq_along(tweets.indices1)/2))
+
+# Clean up
+rm(blogs.indices); rm(blogs.indices1); rm(news.indices); rm(news.indices1); rm(tweets.indices); rm(tweets.indices1)
+
+# Write bigrams to files
+write.table(blogs.bi,"blogs.bi.csv", sep=",", row.names = FALSE)
+write.table(news.bi,"news.bi.csv", sep=",", row.names = FALSE)
+write.table(tweets.bi,"tweets.bi.csv", sep=",", row.names = FALSE)
+
+```
+
+BIGRAMS WITH C <= 3 BECOME "UNK", MAKE BIGRAM TABLES
+
+```{r bigrams}
+suppressPackageStartupMessages(require("data.table"))
+
+## Blogs
+# Load in bigranms, eliminate bigrams with n <= 3
+blogs.corpus_bi <- fread("blogs.corpus_bi.txt", stringsAsFactors=FALSE); blogs.corpus_bi[,1:=NULL]
+setnames(blogs.corpus_bi, "bigram")
+
+blogs.corpus_bisub <- blogs.corpus_bisub[,bigram.count:=.N, by = bigram]
+blogs.corpus_bisub1 <- subset(blogs.corpus_bisub, bigram.count > 2)
+
+# Eliminate duplication, split "gram" from "target" and get rid of bigrams
+blogs.corpus_bisub2 <- blogs.corpus_bisub1[order(-bigram.count)]; blogs.corpus_bisub2.1 <- unique(blogs.corpus_bisub2)
+blogs.corpus_bisub3 <- blogs.corpus_bisub2.1[, c("gram", "target") := tstrsplit(bigram, " ", fixed=TRUE)]
+blogs.corpus_bisub3[,1:=NULL]
+
+# Order columns, sort on "gram" and eliminate all but top match
+setcolorder(blogs.corpus_bisub3, c("gram", "target", "bigram.count"))
+blogs.corpus_bisub3.1 <- blogs.corpus_bisub3[order(gram)]
+blogs.corpus_bisub4 <- blogs.corpus_bisub3.1[blogs.corpus_bisub3.1[, .I[bigram.count == max(bigram.count)], by = gram]$V1]
+
+# Finally drop bigram.count column and rename "gram" and "target"
+blogs.corpus_bisub4[,3:=NULL]
+setnames(blogs.corpus_bisub4,"gram","gram.sorted"); setnames(blogs.corpus_bisub4,"target","target.sorted")
+
+# Clean up
+rm(blogs.corpus_bi); rm(blogs.corpus_bisub); rm(blogs.corpus_bisub1); rm(blogs.corpus_bisub2); rm(blogs.corpus_bisub2.1); rm(blogs.corpus_bisub3); rm(blogs.corpus_bisub3.1)
+
+
+## News
+# Load in bigranms, subset to 10% of file and eliminate bigrams with n <= 3
+news.corpus_bi <- fread("news.corpus_bi.txt", stringsAsFactors=FALSE); news.corpus_bi[,1:=NULL]
+setnames(news.corpus_bi, "bigram")
+news.corpus_bisub <- news.corpus_bi[1:(nrow(news.corpus_bi)/10)]
+news.corpus_bisub <- news.corpus_bisub[,bigram.count:=.N, by = bigram]
+news.corpus_bisub1 <- subset(news.corpus_bisub, bigram.count > 2)
+
+# Eliminate duplication, split "gram" from "target" and get rid of bigrams
+news.corpus_bisub2 <- news.corpus_bisub1[order(-bigram.count)]; news.corpus_bisub2.1 <- unique(news.corpus_bisub2)
+news.corpus_bisub3 <- news.corpus_bisub2.1[, c("gram", "target") := tstrsplit(bigram, " ", fixed=TRUE)]
+news.corpus_bisub3[,1:=NULL]
+
+# Order columns, sort on "gram" and eliminate all but top match
+setcolorder(news.corpus_bisub3, c("gram", "target", "bigram.count"))
+news.corpus_bisub3.1 <- news.corpus_bisub3[order(gram)]
+news.corpus_bisub4 <- news.corpus_bisub3.1[news.corpus_bisub3.1[, .I[bigram.count == max(bigram.count)], by = gram]$V1]
+
+# Finally drop bigram.count column and rename "gram" and "target"
+news.corpus_bisub4[,3:=NULL]
+setnames(news.corpus_bisub4,"gram","gram.sorted"); setnames(news.corpus_bisub4,"target","target.sorted")
+
+# Clean up
+rm(news.corpus_bi); rm(news.corpus_bisub); rm(news.corpus_bisub1); rm(news.corpus_bisub2); rm(news.corpus_bisub2.1); rm(news.corpus_bisub3); rm(news.corpus_bisub3.1)
+
+
+## Tweets
+# Load in bigranms, subset to 10% of file and eliminate bigrams with n <= 3
+tweets.corpus_bi <- fread("tweets.corpus_bi.txt", stringsAsFactors=FALSE); tweets.corpus_bi[,1:=NULL]
+setnames(tweets.corpus_bi, "bigram")
+tweets.corpus_bisub <- tweets.corpus_bi[1:(nrow(tweets.corpus_bi)/10)]
+tweets.corpus_bisub <- tweets.corpus_bisub[,bigram.count:=.N, by = bigram]
+tweets.corpus_bisub1 <- subset(tweets.corpus_bisub, bigram.count > 2)
+
+# Eliminate duplication, split "gram" from "target" and get rid of bigrams
+tweets.corpus_bisub2 <- tweets.corpus_bisub1[order(-bigram.count)]; tweets.corpus_bisub2.1 <- unique(tweets.corpus_bisub2)
+tweets.corpus_bisub3 <- tweets.corpus_bisub2.1[, c("gram", "target") := tstrsplit(bigram, " ", fixed=TRUE)]
+tweets.corpus_bisub3[,1:=NULL]
+
+# Order columns, sort on "gram" and eliminate all but top match
+setcolorder(tweets.corpus_bisub3, c("gram", "target", "bigram.count"))
+tweets.corpus_bisub3.1 <- tweets.corpus_bisub3[order(gram)]
+tweets.corpus_bisub4 <- tweets.corpus_bisub3.1[tweets.corpus_bisub3.1[, .I[bigram.count == max(bigram.count)], by = gram]$V1]
+
+# Finally drop bigram.count column and rename "gram" and "target"
+tweets.corpus_bisub4[,3:=NULL]
+setnames(tweets.corpus_bisub4,"gram","gram.sorted"); setnames(tweets.corpus_bisub4,"target","target.sorted")
+
+## Clean up
+rm(tweets.corpus_bi); rm(tweets.corpus_bisub); rm(tweets.corpus_bisub1); rm(tweets.corpus_bisub2); rm(tweets.corpus_bisub2.1); rm(tweets.corpus_bisub3); rm(tweets.corpus_bisub3.1)
+
+```
+
+MAKE TRIGRAM TABLES
+
+```{r for now, take 10% of trigrams until I can scale up}
+
+## Blogs
+# Load in trigrams, subset to 10% of file and eliminate trigrams with n =< 3
+blogs.corpus_tri <- fread("blogs.corpus_tri.txt", stringsAsFactors=FALSE); blogs.corpus_tri[,1:=NULL]
+setnames(blogs.corpus_tri, "trigram")
+blogs.corpus_trisub <- blogs.corpus_tri[1:(nrow(blogs.corpus_tri)/10)]
+blogs.corpus_trisub <- blogs.corpus_trisub[,trigram.count:=.N, by = trigram]
+blogs.corpus_trisub1 <- subset(blogs.corpus_trisub, trigram.count > 2)
+
+# Eliminate duplication, split "wi_2", "gram" and "target", then get rid of trigrams
+blogs.corpus_trisub2 <- blogs.corpus_trisub1[order(-trigram.count)]; blogs.corpus_trisub2.1 <- unique(blogs.corpus_trisub2)
+blogs.corpus_trisub3 <- blogs.corpus_trisub2.1[, c("wi_2", "gram", "target") := tstrsplit(trigram, " ", fixed=TRUE)]
+blogs.corpus_trisub3[,1:=NULL]
+
+# Order columns, switch to data frame to concatenate first two columns, then sort on "gram" and eliminate all but top match
+setcolorder(blogs.corpus_trisub3, c("wi_2", "gram", "target", "trigram.count")); blogs.corpus_trisub3.df <- as.data.frame(blogs.corpus_trisub3)
+blogs.corpus_trisub3.df <- data.frame(gram = paste(blogs.corpus_trisub3.df[,1], blogs.corpus_trisub3.df[,2]), blogs.corpus_trisub3.df[, 3:4]); blogs.corpus_trisub3.1 <- as.data.table(blogs.corpus_trisub3.df)
+
+blogs.corpus_trisub4 <- blogs.corpus_trisub3.1[order(gram)]
+blogs.corpus_trisub5 <- blogs.corpus_trisub4[blogs.corpus_trisub4[, .I[trigram.count == max(trigram.count)], by = gram]$V1]
+
+# Finally drop trigram.count column and rename "gram" and "target"
+blogs.corpus_trisub5[,3:=NULL]
+setnames(blogs.corpus_trisub5,"gram","gram.sorted"); setnames(blogs.corpus_trisub5,"target","target.sorted")
+
+# Clean up
+rm(blogs.corpus_tri); rm(blogs.corpus_trisub); rm(blogs.corpus_trisub1); rm(blogs.corpus_trisub2); rm(blogs.corpus_trisub2.1); rm(blogs.corpus_trisub3); rm(blogs.corpus_trisub3.df); rm(blogs.corpus_trisub3.1); rm(blogs.corpus_trisub4)
+
+
+# News
+# Load in trigrams, subset to 10% of file and eliminate trigrams with n =< 3
+news.corpus_tri <- fread("news.corpus_tri.txt", stringsAsFactors=FALSE); news.corpus_tri[,1:=NULL]
+setnames(news.corpus_tri, "trigram")
+news.corpus_trisub <- news.corpus_tri[1:(nrow(news.corpus_tri)/10)]
+news.corpus_trisub <- news.corpus_trisub[,trigram.count:=.N, by = trigram]
+news.corpus_trisub1 <- subset(news.corpus_trisub, trigram.count > 2)
+
+# Eliminate duplication, split "wi_2", "gram" and "target", then get rid of trigrams
+news.corpus_trisub2 <- news.corpus_trisub1[order(-trigram.count)]; news.corpus_trisub2.1 <- unique(news.corpus_trisub2)
+news.corpus_trisub3 <- news.corpus_trisub2.1[, c("wi_2", "gram", "target") := tstrsplit(trigram, " ", fixed=TRUE)]
+news.corpus_trisub3[,1:=NULL]
+
+# Order columns, switch to data frame to concatenate first two columns, then sort on "gram" and eliminate all but top match
+setcolorder(news.corpus_trisub3, c("wi_2", "gram", "target", "trigram.count")); news.corpus_trisub3.df <- as.data.frame(news.corpus_trisub3)
+news.corpus_trisub3.df <- data.frame(gram = paste(news.corpus_trisub3.df[,1], news.corpus_trisub3.df[,2]), news.corpus_trisub3.df[, 3:4]); news.corpus_trisub3.1 <- as.data.table(news.corpus_trisub3.df)
+
+news.corpus_trisub4 <- news.corpus_trisub3.1[order(gram)]
+news.corpus_trisub5 <- news.corpus_trisub4[news.corpus_trisub4[, .I[trigram.count == max(trigram.count)], by = gram]$V1]
+
+# Finally drop trigram.count column and rename "gram" and "target"
+news.corpus_trisub5[,3:=NULL]
+setnames(news.corpus_trisub5,"gram","gram.sorted"); setnames(news.corpus_trisub5,"target","target.sorted")
+
+# Clean up
+rm(news.corpus_tri); rm(news.corpus_trisub); rm(news.corpus_trisub1); rm(news.corpus_trisub2); rm(news.corpus_trisub2.1); rm(news.corpus_trisub3); rm(news.corpus_trisub3.df); rm(news.corpus_trisub3.1); rm(news.corpus_trisub4)
+
+
+
+# Tweets
+# Load in trigrams, subset to 10% of file and eliminate trigrams with n =< 3
+tweets.corpus_tri <- fread("tweets.corpus_tri.txt", stringsAsFactors=FALSE); tweets.corpus_tri[,1:=NULL]
+setnames(tweets.corpus_tri, "trigram")
+tweets.corpus_trisub <- tweets.corpus_tri[1:(nrow(tweets.corpus_tri)/10)]
+tweets.corpus_trisub <- tweets.corpus_trisub[,trigram.count:=.N, by = trigram]
+tweets.corpus_trisub1 <- subset(tweets.corpus_trisub, trigram.count > 2)
+
+# Eliminate duplication, split "wi_2", "gram" and "target", then get rid of trigrams
+tweets.corpus_trisub2 <- tweets.corpus_trisub1[order(-trigram.count)]; tweets.corpus_trisub2.1 <- unique(tweets.corpus_trisub2)
+tweets.corpus_trisub3 <- tweets.corpus_trisub2.1[, c("wi_2", "gram", "target") := tstrsplit(trigram, " ", fixed=TRUE)]
+tweets.corpus_trisub3[,1:=NULL]
+
+# Order columns, switch to data frame to concatenate first two columns, then sort on "gram" and eliminate all but top match
+setcolorder(tweets.corpus_trisub3, c("wi_2", "gram", "target", "trigram.count")); tweets.corpus_trisub3.df <- as.data.frame(tweets.corpus_trisub3)
+tweets.corpus_trisub3.df <- data.frame(gram = paste(tweets.corpus_trisub3.df[,1], tweets.corpus_trisub3.df[,2]), tweets.corpus_trisub3.df[, 3:4]); tweets.corpus_trisub3.1 <- as.data.table(tweets.corpus_trisub3.df)
+
+tweets.corpus_trisub4 <- tweets.corpus_trisub3.1[order(gram)]
+tweets.corpus_trisub5 <- tweets.corpus_trisub4[tweets.corpus_trisub4[, .I[trigram.count == max(trigram.count)], by = gram]$V1]
+
+# Finally drop trigram.count column and rename "gram" and "target"
+tweets.corpus_trisub5[,3:=NULL]
+setnames(tweets.corpus_trisub5,"gram","gram.sorted"); setnames(tweets.corpus_trisub5,"target","target.sorted")
+
+# Clean up
+rm(tweets.corpus_tri); rm(tweets.corpus_trisub); rm(tweets.corpus_trisub1); rm(tweets.corpus_trisub2); rm(tweets.corpus_trisub2.1); rm(tweets.corpus_trisub3); rm(tweets.corpus_trisub3.df); rm(tweets.corpus_trisub3.1); rm(tweets.corpus_trisub4)
+
+```
+
+MAKE TETRAGRAMS TABLE
+
+```{r for now, take 10% of tetragrams until I can scale up}
+
+# Blogs
+blogs.corpus_4 <- fread("blogs.corpus_4.txt", stringsAsFactors=FALSE); blogs.corpus_4[,1:=NULL]
+setnames(blogs.corpus_4, "tetragram")
+blogs.corpus_4sub <- blogs.corpus_4[1:(nrow(blogs.corpus_4)/10)]
+blogs.corpus_4sub <- blogs.corpus_4sub[,tetragram.count:=.N, by = tetragram]
+blogs.corpus_4sub1 <- subset(blogs.corpus_4sub, tetragram.count > 2)
+
+# Eliminate duplication, split "wi_2", "gram" and "target", then get rid of trigrams
+blogs.corpus_4sub2 <- blogs.corpus_4sub1[order(-tetragram.count)]; blogs.corpus_4sub2.1 <- unique(blogs.corpus_4sub2)
+blogs.corpus_4sub3 <- blogs.corpus_4sub2.1[, c("wi_3", "wi_2", "gram", "target") := tstrsplit(tetragram, " ", fixed=TRUE)]
+blogs.corpus_4sub3[,1:=NULL]
+
+# Order columns, switch to data frame to concatenate first two columns, then sort on "gram" and eliminate all but top match
+setcolorder(blogs.corpus_4sub3, c("wi_3", "wi_2", "gram", "target", "tetragram.count"))
+blogs.corpus_4sub3.df <- as.data.frame(blogs.corpus_4sub3)
+blogs.corpus_4sub3.df <- data.frame(gram = paste(blogs.corpus_4sub3.df[,1], blogs.corpus_4sub3.df[,2], blogs.corpus_4sub3.df[,3]), blogs.corpus_4sub3.df[, 4:5]); blogs.corpus_4sub3.1 <- as.data.table(blogs.corpus_4sub3.df)
+
+blogs.corpus_4sub4 <- blogs.corpus_4sub3.1[order(gram)]
+blogs.corpus_4sub5 <- blogs.corpus_4sub4[blogs.corpus_4sub4[, .I[tetragram.count == max(tetragram.count)], by = gram]$V1]
+
+# Finally drop trigram.count column and rename "gram" and "target"
+blogs.corpus_4sub5[,3:=NULL]
+setnames(blogs.corpus_4sub5,"gram","gram.sorted"); setnames(blogs.corpus_4sub5,"target","target.sorted")
+
+# Clean up
+rm(blogs.corpus_4); rm(blogs.corpus_4sub); rm(blogs.corpus_4sub1); rm(blogs.corpus_4sub2); rm(blogs.corpus_4sub2.1); rm(blogs.corpus_4sub3); rm(blogs.corpus_4sub3.df); rm(blogs.corpus_4sub3.1); rm(blogs.corpus_4sub4)
+
+
+
+# News
+news.corpus_4 <- fread("news.corpus_4.txt", stringsAsFactors=FALSE); news.corpus_4[,1:=NULL]
+setnames(news.corpus_4, "tetragram")
+news.corpus_4sub <- news.corpus_4[1:(nrow(news.corpus_4)/10)]
+news.corpus_4sub <- news.corpus_4sub[,tetragram.count:=.N, by = tetragram]
+news.corpus_4sub1 <- subset(news.corpus_4sub, tetragram.count > 2)
+
+# Eliminate duplication, split "wi_2", "gram" and "target", then get rid of trigrams
+news.corpus_4sub2 <- news.corpus_4sub1[order(-tetragram.count)]; news.corpus_4sub2.1 <- unique(news.corpus_4sub2)
+news.corpus_4sub3 <- news.corpus_4sub2.1[, c("wi_3", "wi_2", "gram", "target") := tstrsplit(tetragram, " ", fixed=TRUE)]
+news.corpus_4sub3[,1:=NULL]
+
+# Order columns, switch to data frame to concatenate first two columns, then sort on "gram" and eliminate all but top match
+setcolorder(news.corpus_4sub3, c("wi_3", "wi_2", "gram", "target", "tetragram.count"))
+news.corpus_4sub3.df <- as.data.frame(news.corpus_4sub3)
+news.corpus_4sub3.df <- data.frame(gram = paste(news.corpus_4sub3.df[,1], news.corpus_4sub3.df[,2], news.corpus_4sub3.df[,3]), news.corpus_4sub3.df[, 4:5]); news.corpus_4sub3.1 <- as.data.table(news.corpus_4sub3.df)
+
+news.corpus_4sub4 <- news.corpus_4sub3.1[order(gram)]
+news.corpus_4sub5 <- news.corpus_4sub4[news.corpus_4sub4[, .I[tetragram.count == max(tetragram.count)], by = gram]$V1]
+
+# Finally drop trigram.count column and rename "gram" and "target"
+news.corpus_4sub5[,3:=NULL]
+setnames(news.corpus_4sub5,"gram","gram.sorted"); setnames(news.corpus_4sub5,"target","target.sorted")
+
+# Clean up
+rm(news.corpus_4); rm(news.corpus_4sub); rm(news.corpus_4sub1); rm(news.corpus_4sub2); rm(news.corpus_4sub2.1); rm(news.corpus_4sub3); rm(news.corpus_4sub3.df); rm(news.corpus_4sub3.1); rm(news.corpus_4sub4)
+
+
+
+# Tweets
+tweets.corpus_4 <- fread("tweets.corpus_4.txt", stringsAsFactors=FALSE); tweets.corpus_4[,1:=NULL]
+setnames(tweets.corpus_4, "tetragram")
+tweets.corpus_4sub <- tweets.corpus_4[1:(nrow(tweets.corpus_4)/10)]
+tweets.corpus_4sub <- tweets.corpus_4sub[,tetragram.count:=.N, by = tetragram]
+tweets.corpus_4sub1 <- subset(tweets.corpus_4sub, tetragram.count > 2)
+
+# Eliminate duplication, split "wi_2", "gram" and "target", then get rid of trigrams
+tweets.corpus_4sub2 <- tweets.corpus_4sub1[order(-tetragram.count)]; tweets.corpus_4sub2.1 <- unique(tweets.corpus_4sub2)
+tweets.corpus_4sub3 <- tweets.corpus_4sub2.1[, c("wi_3", "wi_2", "gram", "target") := tstrsplit(tetragram, " ", fixed=TRUE)]
+tweets.corpus_4sub3[,1:=NULL]
+
+# Order columns, switch to data frame to concatenate first two columns, then sort on "gram" and eliminate all but top match
+setcolorder(tweets.corpus_4sub3, c("wi_3", "wi_2", "gram", "target", "tetragram.count"))
+tweets.corpus_4sub3.df <- as.data.frame(tweets.corpus_4sub3)
+tweets.corpus_4sub3.df <- data.frame(gram = paste(tweets.corpus_4sub3.df[,1], tweets.corpus_4sub3.df[,2], tweets.corpus_4sub3.df[,3]), tweets.corpus_4sub3.df[, 4:5]); tweets.corpus_4sub3.1 <- as.data.table(tweets.corpus_4sub3.df)
+
+tweets.corpus_4sub4 <- tweets.corpus_4sub3.1[order(gram)]
+tweets.corpus_4sub5 <- tweets.corpus_4sub4[tweets.corpus_4sub4[, .I[tetragram.count == max(tetragram.count)], by = gram]$V1]
+
+# Finally drop trigram.count column and rename "gram" and "target"
+tweets.corpus_4sub5[,3:=NULL]
+setnames(tweets.corpus_4sub5,"gram","gram.sorted"); setnames(tweets.corpus_4sub5,"target","target.sorted")
+
+# Clean up
+rm(tweets.corpus_4); rm(tweets.corpus_4sub); rm(tweets.corpus_4sub1); rm(tweets.corpus_4sub2); rm(tweets.corpus_4sub2.1); rm(tweets.corpus_4sub3); rm(tweets.corpus_4sub3.df); rm(tweets.corpus_4sub3.1); rm(tweets.corpus_4sub4)
+
+```
+
+Building utility to search through tables, optimize model.
+
+```{r sanity check}
+
+####### what do you do if returned results have THE SAME C(w)? at the moment, both results are returned...
+
+
+profanity_list <- readLines("http://www.bannedwordlist.com/lists/swearWords.txt", warn = FALSE)
+
+### This will have come in from Shiny app
+test.string <- "this is the"
+
+### Assume user has selected "blogs", "news" or "twitter"
+corpus.type <- "blogs"
+
+
+# Clean test.string using same steps as w/ the corpus
+test.string.1 <-tolower(test.string); test.string.2 <- str_replace_all(test.string.1, "[^[:alnum:][:space:]'|’]", ""); test.string.3 <- iconv(test.string.2, from="UTF-8", to="ascii", sub=""); test.string.4 <- iconv(test.string.3, to="ASCII//TRANSLIT"); test.string.5 <- str_replace_all(test.string.4, "[[:digit:]]+", ""); test.string.6 <- str_replace_all(test.string.5, paste(profanity_list, collapse = "|"), replacement = "")
+test.string.7 <- strsplit(test.string.6, " ")
+
+# Clean up
+rm(test.string); rm(test.string.1); rm(test.string.2); rm(test.string.3); rm(test.string.4); rm(test.string.5); rm(test.string.6)
+
+# Create ngrams for lookup
+test.string_gram4 <- sapply(test.string.7, tail, 3); test.string_gram4.gram <- test.string_gram4[1:3, ]; test.string_gram4.gram <- paste(test.string_gram4.gram, collapse = " ")
+
+test.string_gram3 <- sapply(test.string.7, tail, 2); test.string_gram3.gram <- test.string_gram3[1:2, ]; test.string_gram3.gram <- paste(test.string_gram3.gram, collapse = " ")
+
+test.string_gram2 <- sapply(test.string.7, tail, 1)
+
+# Look ngrams up in probability tables, return matches, see below for architecture to search programatically, to be incorporated into shiny app
+
+subset(blogs.corpus_4sub5, gram.sorted %in% test.string_gram4.gram)
+subset(blogs.corpus_trisub5, gram.sorted %in% test.string_gram3.gram)
+subset(blogs.corpus_bisub4, gram.sorted %in% test.string_gram2)
+
+subset(news.corpus_4sub5, gram.sorted %in% test.string_gram4.gram)
+subset(news.corpus_trisub5, gram.sorted %in% test.string_gram3.gram)
+subset(blogs.corpus_bisub4, gram.sorted %in% test.string_gram2)
+
+subset(tweets.corpus_4sub5, gram.sorted %in% test.string_gram4.gram)
+subset(tweets.corpus_trisub5, gram.sorted %in% test.string_gram3.gram)
+subset(tweets.corpus_bisub4, gram.sorted %in% test.string_gram2)
+
+
+## Start with 4-gram, back off to trigram
+
+tetragram.match <- subset(blogs.corpus_4sub5, gram.sorted %in% test.string_gram4.gram)
+
+if (nrow(tetragram.match) > 0) {
+  print(tetragram.match$target.sorted)
+} 
+else {
+  trigram.match <- subset(blogs.corpus_trisub5, gram.sorted %in% test.string_gram3.gram)
+  if (nrow(trigram.match) > 0) {
+    print(trigram.match$target.sorted)
+  } 
+  else {
+    bigram.match <- subset(blogs.corpus_bisub4, gram.sorted %in% test.string_gram2)
+    if (nrow(bigram.match) > 0) {
+      print(bigram.match$target.sorted)
+    }
+    else {
+      print "OH SHIT"  
+    }
+  }
+}
+
+
+
+subset(tweets.corpus_4sub5, gram.sorted %in% test.string_gram4.gram)
+subset(news.corpus_4sub5, gram.sorted %in% test.string_gram4.gram)
+```
+
+
