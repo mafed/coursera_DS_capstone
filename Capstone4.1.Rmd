@@ -242,7 +242,7 @@ blogs.toks1 <- noquote(as.vector(blogs.toks))
 source("Ngrams_tokenizer.R")
 bigram.tokenizer <- ngram_tokenizer(2)
 
-## Make bigrams of sample, eliminate bigrams w/ "UNK", get counts, eliminate bigrams with C(W) <= 3
+## Make bigrams, eliminate bigrams w/ "UNK", get counts, eliminate bigrams with C(W) <= 3
 blogs.bi <- bigram.tokenizer(blogs.toks1); blogs.biDT <- as.data.table(blogs.bi); setnames(blogs.biDT, "bigram")
 blogs.biDT1 <- blogs.biDT[!bigram %like% "UNK"]
 
@@ -270,7 +270,7 @@ rm(blogs.bi); rm(blogs.biDT); rm(blogs.biDT1); rm(blogs.biDT2); rm(blogs.biDT3);
 load("news.toks.RData")
 news.toks1 <- noquote(as.vector(news.toks))
 
-## Make bigrams of sample, eliminate bigrams w/ "UNK", get counts, eliminate bigrams with C(W) <= 3
+## Make bigrams, eliminate bigrams w/ "UNK", get counts, eliminate bigrams with C(W) <= 3
 news.bi <- bigram.tokenizer(news.toks1); news.biDT <- as.data.table(news.bi); setnames(news.biDT, "bigram")
 news.biDT1 <- news.biDT[!bigram %like% "UNK"]
 
@@ -301,7 +301,7 @@ tweets.toks1 <- noquote(as.vector(tweets.toks))
 source("Ngrams_tokenizer.R")
 bigram.tokenizer <- ngram_tokenizer(2)
 
-## Make bigrams of sample, eliminate bigrams w/ "UNK", get counts, eliminate bigrams with C(W) <= 3
+## Make bigrams, eliminate bigrams w/ "UNK", get counts, eliminate bigrams with C(W) <= 3
 tweets.bi <- bigram.tokenizer(tweets.toks1); tweets.biDT <- as.data.table(tweets.bi); setnames(tweets.biDT, "bigram")
 tweets.biDT1 <- tweets.biDT[!bigram %like% "UNK"]
 
@@ -332,7 +332,7 @@ trigrams...
 trigram.tokenizer <- ngram_tokenizer(3)
 
 ## BLOGS
-## Make trigrams of sample, eliminate trigrams w/ "UNK", get counts, eliminate trigrams with C(W) <= 3
+## Make trigrams, eliminate trigrams w/ "UNK", get counts, eliminate trigrams with C(W) <= 3
 blogs.tri <- trigram.tokenizer(blogs.toks1); blogs.triDT <- as.data.table(blogs.tri); setnames(blogs.triDT, "trigram")
 blogs.triDT1 <- blogs.triDT[!trigram %like% "UNK"]
 
@@ -362,7 +362,7 @@ rm(blogs.toks); rm(blogs.toksamp); rm(blogs.trisamp); rm(blogs.trisampDT); rm(bl
 
 
 ## NEWS
-## Make trigrams of sample, eliminate trigrams w/ "UNK", get counts, eliminate trigrams with C(W) <= 3
+## Make trigrams, eliminate trigrams w/ "UNK", get counts, eliminate trigrams with C(W) <= 3
 news.tri <- trigram.tokenizer(news.toks1); news.triDT <- as.data.table(news.tri); setnames(news.triDT, "trigram")
 news.triDT1 <- news.triDT[!trigram %like% "UNK"]
 
@@ -392,7 +392,7 @@ rm(news.toks); rm(news.toksamp); rm(news.trisamp); rm(news.trisampDT); rm(news.t
 
 
 ## TWEETS
-## Make trigrams of sample, eliminate trigrams w/ "UNK", get counts, eliminate trigrams with C(W) <= 3
+## Make trigrams, eliminate trigrams w/ "UNK", get counts, eliminate trigrams with C(W) <= 3
 tweets.tri <- trigram.tokenizer(tweets.toks1); tweets.triDT <- as.data.table(tweets.tri); setnames(tweets.triDT, "trigram")
 tweets.triDT1 <- tweets.triDT[!trigram %like% "UNK"]
 
@@ -431,7 +431,7 @@ tetragram.tokenizer <- ngram_tokenizer(4)
 tetragram.tokenizer <- ngram_tokenizer(4)
 
 ## BLOGS
-## Make tetragrams of sample, eliminate tetragrams w/ "UNK", get counts, eliminate tetragrams with C(W) <= 3
+## Make tetragrams, eliminate tetragrams w/ "UNK", get counts, eliminate tetragrams with C(W) <= 3
 blogs.tetra <- tetragram.tokenizer(blogs.toks1); blogs.tetraDT <- as.data.table(blogs.tetra); setnames(blogs.tetraDT, "tetragram")
 blogs.tetraDT1 <- blogs.tetraDT[!tetragram %like% "UNK"]
 
@@ -460,7 +460,7 @@ blogs.tetraDT7[,c(3,4,5):=NULL]
 rm(blogs.toks1);  rm(blogs.tetra); rm(blogs.tetraDT); rm(blogs.tetraDT1); rm(blogs.tetraDT2); rm(blogs.tetraDT3); rm(blogs.tetraDT4); rm(blogs.tetraDT4.1); rm(blogs.tetraDT5); rm(blogs.tetraDT5.1); rm(blogs.tetraDT6); rm(blogs.tetraDT6.1)
 
 ## NEWS
-## Make tetragrams of sample, eliminate tetragrams w/ "UNK", get counts, eliminate tetragrams with C(W) <= 3
+## Make tetragrams, eliminate tetragrams w/ "UNK", get counts, eliminate tetragrams with C(W) <= 3
 news.tetra <- tetragram.tokenizer(news.toks1); news.tetraDT <- as.data.table(news.tetra); setnames(news.tetraDT, "tetragram")
 news.tetraDT1 <- news.tetraDT[!tetragram %like% "UNK"]
 
@@ -489,7 +489,7 @@ news.tetraDT7[,c(3,4,5):=NULL]
 rm(news.toks1);  rm(news.tetra); rm(news.tetraDT); rm(news.tetraDT1); rm(news.tetraDT2); rm(news.tetraDT3); rm(news.tetraDT4); rm(news.tetraDT4.1); rm(news.tetraDT5); rm(news.tetraDT5.1); rm(news.tetraDT6); rm(news.tetraDT6.1)
 
 ## TWEETS 
-## Make tetragrams of sample, eliminate tetragrams w/ "UNK", get counts, eliminate tetragrams with C(W) <= 3
+## Make tetragrams, eliminate tetragrams w/ "UNK", get counts, eliminate tetragrams with C(W) <= 3
 tweets.tetra <- tetragram.tokenizer(tweets.toks1); tweets.tetraDT <- as.data.table(tweets.tetra); setnames(tweets.tetraDT, "tetragram")
 tweets.tetraDT1 <- tweets.tetraDT[!tetragram %like% "UNK"]
 
@@ -527,7 +527,7 @@ Having derived our n-grams, we start to build a model for text prediction. In th
 To begin with, we test out our approach on strings derived from the course's quizzes. 
 
 
-```{r first pass}
+```{r first pass at lookup}
 
 ### This will have come in from Shiny app
 test.string <- "Very early observations on the Bills game: Offense still struggling but the"
@@ -624,7 +624,6 @@ rm(tweets_ps); rm(tweets_targets); rm(tweets_targetDF); rm(tweets_target)
 
 ```
 
-
 The correct answers for the first three questions ("beer", "world", "happiest") are given by the Twitter model. Satisfied that this is a decent first go at the model, we test the model more extensively using our "validation" data. First we read back in our validation data, cleaning it as we will the incoming text in the Shiny app. 
 
 ```{r read in and clean validation data}
@@ -666,7 +665,7 @@ rm(tweets.val); rm(tweets.val.1); rm(tweets.val.2); rm(tweets.val.3)
 
 ```
 
-Next we make n-grams and separate "ngrams" from the "targets" that we will try to predict.
+Next we make n-grams, then subset our validation data set for a first look at accuracy scores with our base lambda values. 
 
 ```{r make and prepare ngrams from validation data}
 
@@ -690,6 +689,33 @@ tweets.val_tetra <- tetragram.tokenizer(tweets.val.4)
 
 ## Clean up
 rm(blogs.val.4); rm(news.val.4); rm(tweets.val.4)
+
+```
+
+
+##### STOPPED HERE #######
+
+
+```{r}
+# Subset 25% of validation data for first round of lambda testing
+blogs.val_biDT2_first <- blogs.val_biDT2[sample(1:length(blogs.val_biDT2), 0.25*length(blogs.val_biDT2), replace = FALSE)]
+blogs.val_biDT2rest <- blogs.val_biDT2[!blogs.val_biDT2 %in% blogs.val_biDT2_first]
+
+blogs.val_triDT3_first <- blogs.val_triDT3[sample(1:length(blogs.val_triDT3), 0.25*length(blogs.val_triDT3), replace = FALSE)]
+blogs.val_triDT3rest <- blogs.val_triDT3[!blogs.val_triDT3 %in% blogs.val_triDT3_first]
+
+blogs.val_tetraDT3_first <- blogs.val_tetraDT3[sample(1:length(blogs.val_tetraDT3), 0.25*length(blogs.val_tetraDT3), replace = FALSE)]
+blogs.val_tetraDT3rest <- blogs.val_tetraDT3[!blogs.val_tetraDT3 %in% blogs.val_tetraDT3_first]
+
+
+```
+
+
+
+
+and separate "ngrams" from the "targets" that we will try to predict.
+
+```{r prepare subset for validation testing}
 
 ## Then separate "grams" from "targets" by corpus type
 
@@ -756,15 +782,41 @@ rm(tweets.val_tetra); rm(tweets.val_tetraDT); rm(tweets.val_tetraDT1); rm(tweets
 
 ```
 
-We then subsample our validation data set for a first look at accuracy scores with our base lambda values. 
+
+
+ 
 
 ```{r first subsample for initial lamba evaluaton}
 
 ## Sample from ngrams for first lambda optimization
+blogs.val_biDT2nr <- ((.25)
+                      (nrow(blogs.val_biDT2))
+
+
+
+
+
 set.seed(3)
 
+
+blogs <- readLines("en_US.blogs.txt")
+news <- readLines("en_US.news.txt")
+tweets <- readLines("en_US.twitter.txt", skipNul = TRUE)
+
+set.seed(1)
+blogs.test <- blogs[sample(1:length(blogs), 0.10*length(blogs), replace = FALSE)]
+blogs.rest <- blogs[!blogs %in% blogs.test]
+
+
+
 ## Blogs
-blogs.val_biDT2_first <- blogs.val_biDT2[sample(1:length(blogs.val_biDT2), 0.25*length(blogs.val_biDT2), replace = FALSE)]
+blogs.val_bi_first <- blogs.val_biDT2[1:10]
+                                        
+                                        (.25)(nrow(blogs.val_biDT2))
+
+((.25)(nrow(blogs.val_biDT2)))
+
+[sample(1:length(blogs.val_biDT2), 0.25*length(blogs.val_biDT2), replace = FALSE)]
 blogs.val_biDT2rest <- blogs.val_biDT2[!blogs.val_biDT2 %in% blogs.val_biDT2_first]
 
 blogs.val_triDT3_first <- blogs.val_triDT3[sample(1:length(blogs.val_triDT3), 0.25*length(blogs.val_triDT3), replace = FALSE)]
