@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ## Introduction 
-This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use large text files to build a text prediction algorithmthat is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation](insert URL here).
+This document reports on the Capstone project marking the end of the 9-course Data Science Specialization offered by Coursera and the John Hopkins Department of Biostatistics. The purpose of this project is to apply the knowledge gained throughout the specialization's courses to a novel data science problem: text prediction. Specifically, we use large text files to build a text prediction algorithm that is then incorporated into an interface that can be accessed by others. The project is offered in cooperation with Swiftkey, a company building smart prediction technology for easier mobile typing. Documentation on my Shiny data product is available in an [R Studio Presenter presentation](insert URL here).
 
 I have elected to complete the project in R as per the parameters of the assignment, but also in Python to get hands-on experience with the Python's Natural Language Toolkit ([NLTK](http://www.nltk.org/)). A report on the Python version of the project is available [here](insert URL here).
 
